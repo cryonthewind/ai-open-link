@@ -1,0 +1,260 @@
+:root {
+  --bg-color: #1a1a2e;
+  --panel-bg: #16213e;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --accent: #4338ca;
+  --accent-hover: #4f46e5;
+  --accent-light: #6366f1;
+  --input-bg: #0f172a;
+  --border-color: #334155;
+  --success: #10b981;
+  --error: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Typography */
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+/* Layout */
+.app-header {
+  padding: 1rem 1.5rem;
+  background: var(--panel-bg);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.app-content {
+  flex: 1;
+  padding: 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Cards */
+.card {
+  background: var(--panel-bg);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.card:hover {
+  border-color: var(--accent);
+}
+
+.card-title {
+  font-size: 1.125rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Forms */
+.form-group {
+  margin-bottom: 1rem;
+}
+
+label {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+input,
+select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-main);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+input:focus,
+select:focus {
+  border-color: var(--accent-light);
+}
+
+/* Buttons */
+button {
+  cursor: pointer;
+  padding: 0 1.5rem;
+  height: 40px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+}
+
+.btn-outline:hover {
+  border-color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.btn-danger {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--error);
+}
+
+.btn-danger:hover {
+  background-color: var(--error);
+  color: white;
+}
+
+/* Special Components */
+.tag-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.tag {
+  background-color: var(--accent);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tag-remove {
+  cursor: pointer;
+  font-weight: bold;
+  opacity: 0.7;
+}
+
+.tag-remove:hover {
+  opacity: 1;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-connected {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--success);
+}
+
+.status-disconnected {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: var(--error);
+}
+
+.flex-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Log Viewer */
+.log-viewer {
+  margin-top: 1rem;
+}
+
+.log-container {
+  background: var(--input-bg);
+  color: var(--text-main);
+  font-family: 'Consolas', 'Courier New', monospace;
+  padding: 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  height: 250px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.log-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.log-entry {
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.log-time {
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.log-info {
+  color: #60a5fa;
+}
+
+.log-success {
+  color: var(--success);
+}
+
+.log-error {
+  color: var(--error);
+}
+
+.log-warning {
+  color: #f59e0b;
+}
