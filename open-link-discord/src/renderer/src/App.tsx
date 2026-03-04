@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAppData } from './hooks/useAppData'
-import { AppLog } from './env'
+import type { AppLog } from './env'
 
 function App(): React.JSX.Element {
   const {
@@ -16,10 +16,20 @@ function App(): React.JSX.Element {
 
   const [tokenInput, setTokenInput] = useState('')
   const [newKeyword, setNewKeyword] = useState('')
+  const [newBlacklistKeyword, setNewBlacklistKeyword] = useState('')
   const [logUrlInput, setLogUrlInput] = useState<string | null>(null)
+
+  const [newTestLinkProduct, setNewTestLinkProduct] = useState('')
+  const [newTestLinkUrl, setNewTestLinkUrl] = useState('')
+  const [selectedTestLinks, setSelectedTestLinks] = useState<number[]>([])
 
   const [logs, setLogs] = useState<AppLog[]>([])
   const logsEndRef = useRef<HTMLDivElement>(null)
+
+  // Timer State
+  const [timerInput, setTimerInput] = useState<string>('')
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null)
+  const timerIntervalRef = useRef<any>(null)
 
   useEffect(() => {
     if (window.api && window.api.onAppLog) {
@@ -35,6 +45,15 @@ function App(): React.JSX.Element {
     }
   }, [logs])
 
+  // Timer Effects
+  useEffect(() => {
+    if (timerRemaining !== null && timerRemaining <= 0) {
+      // Timer finished, close app
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+      window.api.closeApp()
+    }
+  }, [timerRemaining])
+
   if (loading || !settings) {
     return <div className="app-content">Loading...</div>
   }
@@ -46,13 +65,10 @@ function App(): React.JSX.Element {
 
   const handleAddKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newKeyword.trim() !== '') {
-      // Split by comma in case user pastes multiple products at once
       const addedKeywords = newKeyword.split(',').map(k => k.trim()).filter(k => k !== '')
       if (addedKeywords.length > 0) {
-        // Filter out duplicates if any
         const currentKeywords = settings.keywords || []
         const uniqueNew = addedKeywords.filter(k => !currentKeywords.includes(k))
-
         const updated = [...currentKeywords, ...uniqueNew]
         updateSettings({ keywords: updated })
       }
@@ -65,12 +81,85 @@ function App(): React.JSX.Element {
     updateSettings({ keywords: updated })
   }
 
+  const handleAddBlacklistKeyword = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && newBlacklistKeyword.trim() !== '') {
+      const addedKeywords = newBlacklistKeyword.split(',').map(k => k.trim()).filter(k => k !== '')
+      if (addedKeywords.length > 0) {
+        const currentKeywords = settings.blacklistKeywords || []
+        const uniqueNew = addedKeywords.filter(k => !currentKeywords.includes(k))
+        const updated = [...currentKeywords, ...uniqueNew]
+        updateSettings({ blacklistKeywords: updated })
+      }
+      setNewBlacklistKeyword('')
+    }
+  }
+
+  const handleRemoveBlacklistKeyword = (index: number) => {
+    const updated = (settings.blacklistKeywords || []).filter((_, i) => i !== index)
+    updateSettings({ blacklistKeywords: updated })
+  }
+
   const handleTestLink = async () => {
+    const urlsToOpen = selectedTestLinks.map(idx => (settings.testLinks || [])[idx]?.url).filter(Boolean)
+    const finalUrls = urlsToOpen.length > 0 ? urlsToOpen : ['https://google.com']
+
     if (settings.targetProfileIds && settings.targetProfileIds.length > 0) {
       await Promise.all(settings.targetProfileIds.map(async (profileId) => {
-        await window.electron.ipcRenderer.invoke('open-url-in-chrome', 'https://google.com', profileId)
+        for (const url of finalUrls) {
+          await window.electron.ipcRenderer.invoke('open-url-in-chrome', url, profileId)
+        }
       }))
     }
+  }
+
+  const handleAddTestLink = () => {
+    if (newTestLinkProduct.trim() && newTestLinkUrl.trim()) {
+      const updated = [...(settings.testLinks || []), { product: newTestLinkProduct.trim(), url: newTestLinkUrl.trim() }]
+      updateSettings({ testLinks: updated })
+      setNewTestLinkProduct('')
+      setNewTestLinkUrl('')
+    }
+  }
+
+  const handleRemoveTestLink = (index: number) => {
+    const updated = (settings.testLinks || []).filter((_, i) => i !== index)
+    updateSettings({ testLinks: updated })
+    setSelectedTestLinks(prev => prev.filter(i => i !== index).map(i => i > index ? i - 1 : i))
+  }
+
+  const handleToggleTestLink = (index: number) => {
+    setSelectedTestLinks(prev =>
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    )
+  }
+
+
+
+  const handleStartTimer = () => {
+    const minutes = parseFloat(timerInput)
+    if (isNaN(minutes) || minutes <= 0) return
+
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+    setTimerRemaining(Math.floor(minutes * 60))
+
+    timerIntervalRef.current = setInterval(() => {
+      setTimerRemaining(prev => prev !== null ? prev - 1 : null)
+    }, 1000)
+  }
+
+  const handleCancelTimer = () => {
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+    setTimerRemaining(null)
+  }
+
+  const handleCloseNow = () => {
+    window.api.closeApp()
+  }
+
+  const formatTimer = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   }
 
   return (
@@ -147,33 +236,85 @@ function App(): React.JSX.Element {
         </section>
 
         {/* Keyword Filter */}
-        <section className="card">
-          <h2 className="card-title">2. Notification Keywords Filter</h2>
-          <div className="form-group">
-            <label>Add Keyword (Press Enter)</label>
-            <input
-              type="text"
-              placeholder="e.g. KHAÄN_CẤP, ALERT"
-              value={newKeyword}
-              onChange={e => setNewKeyword(e.target.value)}
-              onKeyDown={handleAddKeyword}
-            />
-            <div className="tag-container">
-              {settings.keywords?.map((kw, i) => (
-                <span key={i} className="tag">
-                  {kw}
-                  <span className="tag-remove" onClick={() => handleRemoveKeyword(i)}>x</span>
-                </span>
-              ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <section className="card">
+            <h2 className="card-title">2. Notification Keywords Filter (Whitelist)</h2>
+            <div className="form-group">
+              <label>Add Keyword (Press Enter)</label>
+              <input
+                type="text"
+                placeholder="e.g. BUY, ALERT"
+                value={newKeyword}
+                onChange={e => setNewKeyword(e.target.value)}
+                onKeyDown={handleAddKeyword}
+              />
+              <div className="tag-container">
+                {settings.keywords?.map((kw, i) => (
+                  <span key={i} className="tag tag-whitelist">
+                    {kw}
+                    <span className="tag-remove" onClick={() => handleRemoveKeyword(i)}>x</span>
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+
+          <section className="card">
+            <h2 className="card-title">2.1. Blocked Keywords (Blacklist)</h2>
+            <div className="form-group">
+              <label>Add Keyword (Press Enter)</label>
+              <input
+                type="text"
+                placeholder="e.g. SKIP, TEST"
+                value={newBlacklistKeyword}
+                onChange={e => setNewBlacklistKeyword(e.target.value)}
+                onKeyDown={handleAddBlacklistKeyword}
+              />
+              <div className="tag-container">
+                {(settings.blacklistKeywords || []).map((kw, i) => (
+                  <span key={i} className="tag tag-blacklist" style={{ backgroundColor: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger)' }}>
+                    {kw}
+                    <span className="tag-remove" onClick={() => handleRemoveBlacklistKeyword(i)}>x</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
 
         {/* Chrome Config */}
         <section className="card">
           <h2 className="card-title">3. Destination Google Profiles</h2>
           <div className="form-group">
-            <label>Select Chrome Profiles to open links concurrently</label>
+            <div className="flex-row" style={{ justifyContent: 'space-between', marginBottom: '0.5rem', alignItems: 'flex-end' }}>
+              <label style={{ margin: 0 }}>Select Chrome Profiles to open links concurrently</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  className="btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                  onClick={() => {
+                    updateSettings({
+                      targetProfileIds: profiles.map(p => p.id),
+                      targetProfileNames: profiles.map(p => p.name)
+                    })
+                  }}
+                >
+                  Select All
+                </button>
+                <button
+                  className="btn-outline"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                  onClick={() => {
+                    updateSettings({
+                      targetProfileIds: [],
+                      targetProfileNames: []
+                    })
+                  }}
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
             <div className="flex-row" style={{ alignItems: 'flex-start' }}>
               <div
                 className="profile-checkbox-list"
@@ -225,13 +366,6 @@ function App(): React.JSX.Element {
                   );
                 })}
               </div>
-              <button
-                className="btn-outline"
-                onClick={handleTestLink}
-                disabled={!(settings.targetProfileIds && settings.targetProfileIds.length > 0)}
-              >
-                Test Open Link
-              </button>
             </div>
             {settings.targetProfileNames && settings.targetProfileNames.length > 0 && (
               <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: 'var(--text-color)' }}>
@@ -239,32 +373,150 @@ function App(): React.JSX.Element {
               </div>
             )}
           </div>
-        </section>
 
-        {/* Webhook Logging */}
-        <section className="card">
-          <h2 className="card-title">4. Optional: Logging Webhook URL</h2>
-          <div className="form-group">
-            <label>Auto-send POST request when a link is opened (e.g. personal server API)</label>
-            <div className="flex-row">
+          <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+            <h3 style={{ fontSize: '1rem', marginBottom: '0.8rem' }}>Test Links Management</h3>
+
+            <div className="flex-row" style={{ marginBottom: '1rem', alignItems: 'center' }}>
               <input
                 type="text"
-                placeholder="https://discord.com/api/webhooks/..."
-                value={logUrlInput !== null ? logUrlInput : (settings.logServerUrl || '')}
-                onChange={e => setLogUrlInput(e.target.value)}
+                placeholder="Product Name"
+                value={newTestLinkProduct}
+                onChange={e => setNewTestLinkProduct(e.target.value)}
+                style={{ flex: 1 }}
               />
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  updateSettings({ logServerUrl: logUrlInput !== null ? logUrlInput : settings.logServerUrl })
-                  alert('Webhook URL đã được lưu!')
-                }}
-              >
-                Save
-              </button>
+              <input
+                type="text"
+                placeholder="Product Link (https://...)"
+                value={newTestLinkUrl}
+                onChange={e => setNewTestLinkUrl(e.target.value)}
+                style={{ flex: 2 }}
+                onKeyDown={e => e.key === 'Enter' && handleAddTestLink()}
+              />
+              <button className="btn-primary" onClick={handleAddTestLink}>Save Link</button>
             </div>
+
+            {settings.testLinks && settings.testLinks.length > 0 && (
+              <div style={{
+                maxHeight: '200px',
+                overflowY: 'auto',
+                border: '1px solid var(--border-color)',
+                borderRadius: '8px',
+                padding: '0.5rem',
+                marginBottom: '1rem',
+                backgroundColor: 'var(--bg-card)'
+              }}>
+                {(settings.testLinks || []).map((link, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0.8rem 0.5rem',
+                    borderBottom: idx === settings.testLinks.length - 1 ? 'none' : '1px solid var(--border-color)',
+                  }}>
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      flex: 1,
+                      minWidth: 0,
+                      margin: 0,
+                    }}>
+                      <div style={{ width: '40px', display: 'flex', justifyContent: 'flex-start' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedTestLinks.includes(idx)}
+                          onChange={() => handleToggleTestLink(idx)}
+                          style={{ margin: 0, cursor: 'pointer' }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem', flex: 1, overflow: 'hidden', paddingRight: '1rem' }}>
+                        <strong style={{ whiteSpace: 'nowrap', fontSize: '0.95rem', color: 'var(--text-color)' }}>
+                          {link.product || 'Link'}
+                        </strong>
+                        <span style={{ color: 'var(--text-color)', fontSize: '0.85rem', opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          ({link.url})
+                        </span>
+                      </div>
+                    </label>
+                    <div style={{ width: '80px', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+                      <button
+                        className="btn-danger"
+                        style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', borderRadius: '4px', width: '100%' }}
+                        onClick={() => handleRemoveTestLink(idx)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              className="btn-outline"
+              onClick={handleTestLink}
+              disabled={!(settings.targetProfileIds && settings.targetProfileIds.length > 0) || (settings.testLinks?.length > 0 && selectedTestLinks.length === 0)}
+              style={{ width: '100%', padding: '0.75rem' }}
+            >
+              {selectedTestLinks.length > 0 ? `Test Selected Links (${selectedTestLinks.length})` : 'Test Open Link (Fallback to Google)'}
+            </button>
           </div>
         </section>
+
+        {/* Webhook Logging & Timer */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <section className="card">
+            <h2 className="card-title">4. Optional: Logging Webhook URL</h2>
+            <div className="form-group">
+              <label>Auto-send POST request when a link is opened</label>
+              <div className="flex-row">
+                <input
+                  type="text"
+                  placeholder="https://discord.com/api/webhooks/..."
+                  value={logUrlInput !== null ? logUrlInput : (settings.logServerUrl || '')}
+                  onChange={e => setLogUrlInput(e.target.value)}
+                />
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    updateSettings({ logServerUrl: logUrlInput !== null ? logUrlInput : settings.logServerUrl })
+                    alert('Webhook URL đã được lưu!')
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="card">
+            <h2 className="card-title">5. Auto-Shutdown Timer</h2>
+            <div className="form-group">
+              <label>Set Timer (minutes)</label>
+              <div className="flex-row" style={{ alignItems: 'center' }}>
+                <input
+                  type="number"
+                  placeholder="e.g. 60"
+                  value={timerInput}
+                  onChange={e => setTimerInput(e.target.value)}
+                  disabled={timerRemaining !== null}
+                />
+                {timerRemaining === null ? (
+                  <button className="btn-primary" onClick={handleStartTimer} disabled={!timerInput}>
+                    Start Timer
+                  </button>
+                ) : (
+                  <button className="btn-outline" onClick={handleCancelTimer}>
+                    Cancel ({formatTimer(timerRemaining)})
+                  </button>
+                )}
+                <button className="btn-danger" onClick={handleCloseNow}>
+                  Close Now
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
 
         {/* Real-time Logs */}
         <section className="card log-viewer">

@@ -5,9 +5,11 @@ export interface SettingsType {
     selectedGuildId: string | null
     selectedChannelId: string | null
     keywords: string[]
+    blacklistKeywords: string[]
     targetProfileIds: string[]
     targetProfileNames: string[]
     logServerUrl: string | null
+    testLinks: { product: string; url: string }[]
 }
 
 export interface ChromeProfile {
@@ -37,6 +39,7 @@ export interface IElectronAPI {
     getDiscordData: () => Promise<DiscordGuild[]>
     testReadLatestMessage: () => Promise<any>
     onAppLog: (callback: (log: AppLog) => void) => void
+    closeApp: () => Promise<boolean>
 }
 
 export interface AppLog {

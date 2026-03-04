@@ -11,6 +11,7 @@ const api = {
   getDiscordData: () => ipcRenderer.invoke('get-discord-data'),
   testReadLatestMessage: () => ipcRenderer.invoke('test-read-latest-message'),
   onAppLog: (callback: (log: any) => void) => ipcRenderer.on('app-log', (_event, value) => callback(value)),
+  closeApp: () => ipcRenderer.invoke('close-app'),
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

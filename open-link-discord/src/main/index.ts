@@ -22,6 +22,7 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    mainWindow.webContents.openDevTools()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -90,6 +91,11 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('test-read-latest-message', async () => {
     return await testReadLatestMessage()
+  })
+
+  ipcMain.handle('close-app', () => {
+    app.quit()
+    return true
   })
 
   // Initialize electron-store

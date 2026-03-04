@@ -5,9 +5,11 @@ export interface AppSettings {
   selectedGuildId: string | null
   selectedChannelId: string | null
   keywords: string[]
+  blacklistKeywords: string[]
   targetProfileIds: string[]
   targetProfileNames: string[]
   logServerUrl: string | null
+  testLinks: { product: string; url: string }[]
 }
 
 const schema = {
@@ -27,6 +29,10 @@ const schema = {
     type: 'array',
     default: []
   },
+  blacklistKeywords: {
+    type: 'array',
+    default: []
+  },
   targetProfileIds: {
     type: 'array',
     default: []
@@ -38,6 +44,10 @@ const schema = {
   logServerUrl: {
     type: 'string',
     default: ''
+  },
+  testLinks: {
+    type: 'array',
+    default: []
   }
 } as const;
 

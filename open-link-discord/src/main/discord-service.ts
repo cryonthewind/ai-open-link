@@ -129,6 +129,7 @@ function matchesKeywords(text: string, keywords: string[]): boolean {
 }
 
 const rawMessageCache = new Map<string, any>();
+const urlRateLimitCache = new Map<string, number>();
 
 export async function connectDiscord(token: string) {
     if (client) {
@@ -351,10 +352,17 @@ export async function connectDiscord(token: string) {
         // Deduplicate URLs
         urls = [...new Set(urls)]
 
-        // 2. Check keywords
+        // 2. Check keywords (Whitelist)
         const keywords = currentSettings.keywords || []
         if (!matchesKeywords(fullText, keywords)) {
-            dispatchLog(`Ignored: No keywords matched.`, 'warning')
+            dispatchLog(`Ignored: No whitelist keywords matched.`, 'warning')
+            return
+        }
+
+        // 2.5 Check Blocklist
+        const blacklistKeywords = currentSettings.blacklistKeywords || []
+        if (matchesKeywords(fullText, blacklistKeywords)) {
+            dispatchLog(`Ignored: Hit blacklist keyword.`, 'warning')
             return
         }
 
@@ -367,6 +375,24 @@ export async function connectDiscord(token: string) {
         // We only want to open the first valid link found, to prevent opening multiple 
         // secondary links (like author profiles, StockX, etc) contained in the same message.
         urls = [urls[0]]
+
+        const RATE_LIMIT_MS = 3 * 60 * 1000;
+        const now = Date.now();
+        const urlToOpen = urls[0];
+        const lastOpened = urlRateLimitCache.get(urlToOpen);
+
+        if (lastOpened && now - lastOpened < RATE_LIMIT_MS) {
+            dispatchLog(`Ignored: URL ${urlToOpen} was already opened within the last 3 minutes.`, 'warning');
+            return;
+        }
+
+        // Update cache and clean up old entries to prevent memory leaks
+        urlRateLimitCache.set(urlToOpen, now);
+        for (const [cachedUrl, timestamp] of urlRateLimitCache.entries()) {
+            if (now - timestamp > RATE_LIMIT_MS) {
+                urlRateLimitCache.delete(cachedUrl);
+            }
+        }
 
         // 4. Open URLs in target Chrome profile
         const profileIds = currentSettings.targetProfileIds || []

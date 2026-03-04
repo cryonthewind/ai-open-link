@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { SettingsType, ChromeProfile, DiscordGuild } from '../env'
+import type { SettingsType, ChromeProfile, DiscordGuild } from '../env'
 
 export function useAppData() {
     const [settings, setSettings] = useState<SettingsType | null>(null)
