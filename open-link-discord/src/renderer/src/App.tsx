@@ -26,16 +26,27 @@ function App(): React.JSX.Element {
   const [logs, setLogs] = useState<AppLog[]>([])
   const logsEndRef = useRef<HTMLDivElement>(null)
 
-  // Timer State
   const [timerInput, setTimerInput] = useState<string>('')
   const [timerRemaining, setTimerRemaining] = useState<number | null>(null)
   const timerIntervalRef = useRef<any>(null)
+
+  // Opened Profiles State
+  const [openedProfiles, setOpenedProfiles] = useState<any[]>([])
 
   useEffect(() => {
     if (window.api && window.api.onAppLog) {
       window.api.onAppLog((newLog: AppLog) => {
         setLogs((prev) => [...prev, newLog])
       })
+    }
+    if (window.api && window.api.onProfileOpened) {
+      window.api.onProfileOpened((info: any) => {
+        setOpenedProfiles(prev => {
+          // Prevent duplicates if same windowId comes in
+          if (prev.find(p => p.windowId === info.windowId)) return prev;
+          return [...prev, info];
+        });
+      });
     }
   }, [])
 
@@ -53,6 +64,25 @@ function App(): React.JSX.Element {
       window.api.closeApp()
     }
   }, [timerRemaining])
+
+  const handleCloseProfileWindow = async (windowId: number) => {
+    if (window.api && window.api.closeChromeWindow) {
+      const success = await window.api.closeChromeWindow(windowId);
+      if (success) {
+        setOpenedProfiles(prev => prev.filter(p => p.windowId !== windowId));
+      }
+    }
+  };
+
+  const handleCloseAllProfiles = async () => {
+    if (window.api && window.api.closeAllChromeWindows) {
+      const windowIds = openedProfiles.map(p => p.windowId);
+      const success = await window.api.closeAllChromeWindows(windowIds);
+      if (success) {
+        setOpenedProfiles([]);
+      }
+    }
+  };
 
   if (loading || !settings) {
     return <div className="app-content">Loading...</div>
@@ -104,11 +134,38 @@ function App(): React.JSX.Element {
     const finalUrls = urlsToOpen.length > 0 ? urlsToOpen : ['https://google.com']
 
     if (settings.targetProfileIds && settings.targetProfileIds.length > 0) {
-      await Promise.all(settings.targetProfileIds.map(async (profileId) => {
+      const screenW = window.screen.availWidth || window.innerWidth
+      const screenH = window.screen.availHeight || window.innerHeight
+      const total = settings.targetProfileIds.length
+      const windowWidth = Math.floor(screenW / total)
+
+      for (let index = 0; index < settings.targetProfileIds.length; index++) {
+        const profileId = settings.targetProfileIds[index];
+        const bounds = total > 1 ? {
+          x: index * windowWidth,
+          y: 0,
+          width: windowWidth,
+          height: screenH
+        } : undefined
+
         for (const url of finalUrls) {
-          await window.electron.ipcRenderer.invoke('open-url-in-chrome', url, profileId)
+          const result = await window.electron.ipcRenderer.invoke('open-url-in-chrome', url, profileId, bounds)
+          if (result && result.success && result.windowId) {
+            const profileName = (settings.targetProfileNames?.[index]) || profileId;
+            setOpenedProfiles(prev => {
+              const info = {
+                url,
+                profileId,
+                profileName,
+                windowId: result.windowId,
+                timestamp: Date.now()
+              }
+              if (prev.find(p => p.windowId === info.windowId)) return prev;
+              return [...prev, info];
+            });
+          }
         }
-      }))
+      }
     }
   }
 
@@ -455,7 +512,7 @@ function App(): React.JSX.Element {
             <button
               className="btn-outline"
               onClick={handleTestLink}
-              disabled={!(settings.targetProfileIds && settings.targetProfileIds.length > 0) || (settings.testLinks?.length > 0 && selectedTestLinks.length === 0)}
+              disabled={!(settings.targetProfileIds && settings.targetProfileIds.length > 0)}
               style={{ width: '100%', padding: '0.75rem' }}
             >
               {selectedTestLinks.length > 0 ? `Test Selected Links (${selectedTestLinks.length})` : 'Test Open Link (Fallback to Google)'}
@@ -537,6 +594,41 @@ function App(): React.JSX.Element {
             <div ref={logsEndRef} />
           </div>
         </section>
+
+        {/* Floating Opened Profiles UI */}
+        {openedProfiles.length > 0 && (
+          <div className="floating-profiles-container">
+            <div className="floating-profiles-header">
+              <span>Opened Profiles ({openedProfiles.length})</span>
+              <button className="btn-danger" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={handleCloseAllProfiles}>
+                Close All
+              </button>
+            </div>
+            <div className="floating-profiles-list">
+              {openedProfiles.map((p, idx) => (
+                <div key={`${p.windowId}-${idx}`} className="floating-profile-item">
+                  <div className="floating-profile-icon">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <circle cx="12" cy="10" r="3"></circle>
+                      <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"></path>
+                    </svg>
+                  </div>
+                  <div className="floating-profile-info">
+                    <div className="floating-profile-name">{p.profileName}</div>
+                    <div className="floating-profile-time">{new Date(p.timestamp).toLocaleTimeString()}</div>
+                  </div>
+                  <button className="floating-profile-close" onClick={() => handleCloseProfileWindow(p.windowId)}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       </main>
     </div>

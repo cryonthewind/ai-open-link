@@ -11,6 +11,9 @@ const api = {
   getDiscordData: () => ipcRenderer.invoke('get-discord-data'),
   testReadLatestMessage: () => ipcRenderer.invoke('test-read-latest-message'),
   onAppLog: (callback: (log: any) => void) => ipcRenderer.on('app-log', (_event, value) => callback(value)),
+  onProfileOpened: (callback: (info: any) => void) => ipcRenderer.on('profile-opened', (_event, value) => callback(value)),
+  closeChromeWindow: (windowId: number) => ipcRenderer.invoke('close-chrome-window', windowId),
+  closeAllChromeWindows: (windowIds: number[]) => ipcRenderer.invoke('close-all-chrome-windows', windowIds),
   closeApp: () => ipcRenderer.invoke('close-app'),
 }
 

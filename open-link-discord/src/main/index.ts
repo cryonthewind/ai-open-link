@@ -3,7 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { store, initStore, AppSettings } from './store'
-import { getChromeProfiles, openUrlInChrome } from './chrome-service'
+import { getChromeProfiles, openUrlInChrome, closeChromeWindow, closeAllChromeWindows } from './chrome-service'
 import { connectDiscord, disconnectDiscord, getGuildsAndChannels, sendWebhookLog, testReadLatestMessage } from './discord-service'
 
 function createWindow(): void {
@@ -71,8 +71,16 @@ app.whenReady().then(async () => {
     return getChromeProfiles()
   })
 
-  ipcMain.handle('open-url-in-chrome', async (_, url: string, profileDir: string) => {
-    return await openUrlInChrome(url, profileDir)
+  ipcMain.handle('open-url-in-chrome', async (_, url: string, profileDir: string, bounds?: { x: number; y: number; width: number; height: number }) => {
+    return await openUrlInChrome(url, profileDir, bounds)
+  })
+
+  ipcMain.handle('close-chrome-window', async (_, windowId: number) => {
+    return await closeChromeWindow(windowId)
+  })
+
+  ipcMain.handle('close-all-chrome-windows', async (_, windowIds: number[]) => {
+    return await closeAllChromeWindows(windowIds)
   })
 
   // IPC for Discord Service

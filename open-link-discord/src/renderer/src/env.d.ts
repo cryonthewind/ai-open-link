@@ -39,6 +39,9 @@ export interface IElectronAPI {
     getDiscordData: () => Promise<DiscordGuild[]>
     testReadLatestMessage: () => Promise<any>
     onAppLog: (callback: (log: AppLog) => void) => void
+    onProfileOpened: (callback: (info: any) => void) => void
+    closeChromeWindow: (windowId: number) => Promise<boolean>
+    closeAllChromeWindows: (windowIds: number[]) => Promise<boolean>
     closeApp: () => Promise<boolean>
 }
 

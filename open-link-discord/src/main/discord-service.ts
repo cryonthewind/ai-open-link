@@ -119,13 +119,18 @@ export async function sendWebhookLog(currentSettings: any, type: 'link' | 'start
 }
 
 /**
- * Checks if the text contains any of the provided keywords (case-insensitive substring match).
+ * Checks if the text contains any of the provided keywords (ignoring spaces and case).
  */
 function matchesKeywords(text: string, keywords: string[]): boolean {
     if (!keywords || keywords.length === 0) return false
-    const lowerText = text.toLowerCase()
-    // Using .includes() ensures it's a "contains" match rather than an exact word match.
-    return keywords.some(keyword => lowerText.includes(keyword.toLowerCase()))
+
+    // Remove all whitespace characters (spaces, newlines, tabs) for robust matching
+    const normalizedText = text.toLowerCase().replace(/\s+/g, '')
+
+    return keywords.some(keyword => {
+        const normalizedKeyword = keyword.toLowerCase().replace(/\s+/g, '')
+        return normalizedText.includes(normalizedKeyword)
+    })
 }
 
 const rawMessageCache = new Map<string, any>();
@@ -379,15 +384,18 @@ export async function connectDiscord(token: string) {
         const RATE_LIMIT_MS = 3 * 60 * 1000;
         const now = Date.now();
         const urlToOpen = urls[0];
-        const lastOpened = urlRateLimitCache.get(urlToOpen);
 
+        // Synchronously check AND set the cache to prevent race conditions from concurrent messages
+        const lastOpened = urlRateLimitCache.get(urlToOpen);
         if (lastOpened && now - lastOpened < RATE_LIMIT_MS) {
             dispatchLog(`Ignored: URL ${urlToOpen} was already opened within the last 3 minutes.`, 'warning');
             return;
         }
 
-        // Update cache and clean up old entries to prevent memory leaks
+        // Immediately reserve this URL in the cache synchronously
         urlRateLimitCache.set(urlToOpen, now);
+
+        // Clean up old entries to prevent memory leaks
         for (const [cachedUrl, timestamp] of urlRateLimitCache.entries()) {
             if (now - timestamp > RATE_LIMIT_MS) {
                 urlRateLimitCache.delete(cachedUrl);
@@ -409,11 +417,45 @@ export async function connectDiscord(token: string) {
 
         dispatchLog(`Opening ${urls.length} URL(s) in ${profileIds.length} profile(s): ${profileIds.join(', ')}`, 'success')
 
+        const totalProfiles = profileIds.length;
+        let screenW = 1920;
+        let screenH = 1080;
+        try {
+            const { screen } = require('electron')
+            const workArea = screen.getPrimaryDisplay().workAreaSize;
+            screenW = workArea.width;
+            screenH = workArea.height;
+        } catch (e) {
+            // fallback if screen is not fully initialized
+        }
+        const windowWidth = Math.floor(screenW / totalProfiles);
+
         for (const url of urls) {
-            // Open in all profiles concurrently
-            await Promise.all(profileIds.map(async (profileId) => {
-                await openUrlInChrome(url, profileId)
-            }))
+            // Open sequentially to allow AppleScript resizing without race conditions
+            for (let index = 0; index < profileIds.length; index++) {
+                const profileId = profileIds[index];
+                const bounds = totalProfiles > 1 ? {
+                    x: index * windowWidth,
+                    y: 0,
+                    width: windowWidth,
+                    height: screenH
+                } : undefined;
+
+                const { success, windowId } = await openUrlInChrome(url, profileId, bounds)
+
+                if (success && windowId) {
+                    const profileName = (currentSettings as any).targetProfileNames?.[index] || profileId;
+                    BrowserWindow.getAllWindows().forEach(w => {
+                        w.webContents.send('profile-opened', {
+                            url,
+                            profileId,
+                            profileName,
+                            windowId,
+                            timestamp: Date.now()
+                        });
+                    });
+                }
+            }
 
             // Log to webhook once per link, providing all profile names
             await sendWebhookLog(currentSettings, 'link', {
