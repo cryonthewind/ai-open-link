@@ -27,8 +27,8 @@ let client: Client | null = null
  */
 function extractUrls(text: string): string[] {
     if (!text) return []
-    // Match URLs but avoid trailing markdown/discord characters like <, ), or ]
-    const urlRegex = /(https?:\/\/[^\s<)\]]+)/g
+    // Match URLs but avoid trailing markdown/discord characters like <, >, ), or ]
+    const urlRegex = /(https?:\/\/[^\s<)\]>"']+)/g
     const matches = text.match(urlRegex)
     return matches || []
 }
@@ -135,9 +135,30 @@ function matchesKeywords(text: string, keywords: string[]): boolean {
 
 const rawMessageCache = new Map<string, any>();
 const urlRateLimitCache = new Map<string, number>();
+const processedMessageCache = new Map<string, number>();
+
+const messageProcessQueue: Array<() => Promise<void>> = [];
+let isMessageQueueProcessing = false;
+
+async function processMessageQueue() {
+    if (isMessageQueueProcessing) return;
+    isMessageQueueProcessing = true;
+    while (messageProcessQueue.length > 0) {
+        const task = messageProcessQueue.shift();
+        if (task) {
+            try {
+                await task();
+            } catch (e) {
+                console.error("Task queue error", e);
+            }
+        }
+    }
+    isMessageQueueProcessing = false;
+}
 
 export async function connectDiscord(token: string) {
     if (client) {
+        client.removeAllListeners()
         client.destroy()
     }
 
@@ -163,6 +184,15 @@ export async function connectDiscord(token: string) {
     })
 
     client!.on('messageCreate', async (message) => {
+        // 0. Deduplicate identical messages to prevent double triggering
+        const nowMs = Date.now();
+        if (processedMessageCache.has(message.id)) return;
+        processedMessageCache.set(message.id, nowMs);
+
+        for (const [msgId, timestamp] of processedMessageCache.entries()) {
+            if (nowMs - timestamp > 5 * 60 * 1000) processedMessageCache.delete(msgId);
+        }
+
         // 1. Check if the message is from the selected channel
         const currentSettings = store.store
         if (message.channelId !== currentSettings.selectedChannelId) return
@@ -340,7 +370,7 @@ export async function connectDiscord(token: string) {
                     } else {
                         const rawJsonStr = JSON.stringify(rawJsonObj || {})
                         fullText += '\n[REST API DATA] ' + rawJsonStr
-                        const rawUrls = rawJsonStr.match(/(https?:\/\/[^\s<)\]"']+)/g) || []
+                        const rawUrls = rawJsonStr.match(/(https?:\/\/[^\s<)\]>"']+)/g) || []
                         urls.push(...rawUrls)
                     }
                 }
@@ -380,90 +410,96 @@ export async function connectDiscord(token: string) {
         // We only want to open the first valid link found, to prevent opening multiple 
         // secondary links (like author profiles, StockX, etc) contained in the same message.
         urls = [urls[0]]
-
-        const RATE_LIMIT_MS = 3 * 60 * 1000;
-        const now = Date.now();
         const urlToOpen = urls[0];
 
-        // Synchronously check AND set the cache to prevent race conditions from concurrent messages
-        const lastOpened = urlRateLimitCache.get(urlToOpen);
-        if (lastOpened && now - lastOpened < RATE_LIMIT_MS) {
-            dispatchLog(`Ignored: URL ${urlToOpen} was already opened within the last 3 minutes.`, 'warning');
-            return;
-        }
+        // 4. Enqueue the URL opening to prevent race conditions and Applescript crashes when multiple messages arrive instantly
+        messageProcessQueue.push(async () => {
+            const RATE_LIMIT_MS = 3 * 60 * 1000;
+            const now = Date.now();
 
-        // Immediately reserve this URL in the cache synchronously
-        urlRateLimitCache.set(urlToOpen, now);
-
-        // Clean up old entries to prevent memory leaks
-        for (const [cachedUrl, timestamp] of urlRateLimitCache.entries()) {
-            if (now - timestamp > RATE_LIMIT_MS) {
-                urlRateLimitCache.delete(cachedUrl);
+            // Check the cache again inside the serial queue block
+            const lastOpened = urlRateLimitCache.get(urlToOpen);
+            if (lastOpened && now - lastOpened < RATE_LIMIT_MS) {
+                dispatchLog(`Ignored (Queue): URL ${urlToOpen} was already opened within the last 3 minutes.`, 'warning');
+                return;
             }
-        }
 
-        // 4. Open URLs in target Chrome profile
-        const profileIds = currentSettings.targetProfileIds || []
+            // Immediately reserve this URL in the cache synchronously
+            urlRateLimitCache.set(urlToOpen, now);
 
-        // Handle legacy storage format if targetProfileIds is empty but targetProfileId exists
-        if (profileIds.length === 0 && (currentSettings as any).targetProfileId) {
-            profileIds.push((currentSettings as any).targetProfileId)
-        }
-
-        if (profileIds.length === 0) {
-            dispatchLog('Matching message found, but no target Chrome profile is selected.', 'warning')
-            return
-        }
-
-        dispatchLog(`Opening ${urls.length} URL(s) in ${profileIds.length} profile(s): ${profileIds.join(', ')}`, 'success')
-
-        const totalProfiles = profileIds.length;
-        let screenW = 1920;
-        let screenH = 1080;
-        try {
-            const { screen } = require('electron')
-            const workArea = screen.getPrimaryDisplay().workAreaSize;
-            screenW = workArea.width;
-            screenH = workArea.height;
-        } catch (e) {
-            // fallback if screen is not fully initialized
-        }
-        const windowWidth = Math.floor(screenW / totalProfiles);
-
-        for (const url of urls) {
-            // Open sequentially to allow AppleScript resizing without race conditions
-            for (let index = 0; index < profileIds.length; index++) {
-                const profileId = profileIds[index];
-                const bounds = totalProfiles > 1 ? {
-                    x: index * windowWidth,
-                    y: 0,
-                    width: windowWidth,
-                    height: screenH
-                } : undefined;
-
-                const { success, windowId } = await openUrlInChrome(url, profileId, bounds)
-
-                if (success && windowId) {
-                    const profileName = (currentSettings as any).targetProfileNames?.[index] || profileId;
-                    BrowserWindow.getAllWindows().forEach(w => {
-                        w.webContents.send('profile-opened', {
-                            url,
-                            profileId,
-                            profileName,
-                            windowId,
-                            timestamp: Date.now()
-                        });
-                    });
+            // Clean up old entries to prevent memory leaks
+            for (const [cachedUrl, timestamp] of urlRateLimitCache.entries()) {
+                if (now - timestamp > RATE_LIMIT_MS) {
+                    urlRateLimitCache.delete(cachedUrl);
                 }
             }
 
-            // Log to webhook once per link, providing all profile names
-            await sendWebhookLog(currentSettings, 'link', {
-                url,
-                message,
-                profileNames: currentSettings.targetProfileNames || []
-            })
-        }
+            // 5. Open URLs in target Chrome profile
+            const profileIds = currentSettings.targetProfileIds || []
+
+            // Handle legacy storage format if targetProfileIds is empty but targetProfileId exists
+            if (profileIds.length === 0 && (currentSettings as any).targetProfileId) {
+                profileIds.push((currentSettings as any).targetProfileId)
+            }
+
+            if (profileIds.length === 0) {
+                dispatchLog('Matching message found, but no target Chrome profile is selected.', 'warning')
+                return
+            }
+
+            dispatchLog(`Opening ${urls.length} URL(s) in ${profileIds.length} profile(s): ${profileIds.join(', ')}`, 'success')
+
+            const totalProfiles = profileIds.length;
+            let screenW = 1920;
+            let screenH = 1080;
+            try {
+                const { screen } = require('electron')
+                const workArea = screen.getPrimaryDisplay().workAreaSize;
+                screenW = workArea.width;
+                screenH = workArea.height;
+            } catch (e) {
+                // fallback if screen is not fully initialized
+            }
+            const windowWidth = Math.floor(screenW / totalProfiles);
+
+            for (const url of urls) {
+                // Open sequentially to allow AppleScript resizing without race conditions
+                for (let index = 0; index < profileIds.length; index++) {
+                    const profileId = profileIds[index];
+                    const bounds = totalProfiles > 1 ? {
+                        x: index * windowWidth,
+                        y: 0,
+                        width: windowWidth,
+                        height: screenH
+                    } : undefined;
+
+                    const { success, windowId } = await openUrlInChrome(url, profileId, bounds)
+
+                    if (success && windowId) {
+                        const profileName = (currentSettings as any).targetProfileNames?.[index] || profileId;
+                        BrowserWindow.getAllWindows().forEach(w => {
+                            w.webContents.send('profile-opened', {
+                                url,
+                                profileId,
+                                profileName,
+                                windowId,
+                                timestamp: Date.now()
+                            });
+                        });
+                    }
+                }
+
+                // Log to webhook once per link, providing all profile names
+                await sendWebhookLog(currentSettings, 'link', {
+                    url,
+                    message,
+                    profileNames: currentSettings.targetProfileNames || []
+                })
+            }
+        });
+
+        // Trigger the queue processing
+        processMessageQueue();
     })
 
     try {

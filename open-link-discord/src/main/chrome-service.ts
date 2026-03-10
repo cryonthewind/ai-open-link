@@ -154,6 +154,14 @@ export function closeChromeWindow(windowId: number): Promise<boolean> {
         `;
 
         exec(`osascript -e '${script}'`, (error: any) => {
+            const fs = require('fs');
+            const path = require('path');
+            const os = require('os');
+            const logPath = path.join(os.homedir(), 'Desktop', 'app-close-debug.txt');
+            try {
+                fs.appendFileSync(logPath, `Attempted close ${windowId}. Error: ${error}\n`);
+            } catch (e) { }
+
             if (error) {
                 console.error(`Error closing Chrome window ${windowId}: ${error.message}`);
                 resolve(false);

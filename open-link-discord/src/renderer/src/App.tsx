@@ -34,13 +34,16 @@ function App(): React.JSX.Element {
   const [openedProfiles, setOpenedProfiles] = useState<any[]>([])
 
   useEffect(() => {
+    let cleanupAppLog: (() => void) | undefined;
+    let cleanupProfileOpened: (() => void) | undefined;
+
     if (window.api && window.api.onAppLog) {
-      window.api.onAppLog((newLog: AppLog) => {
+      cleanupAppLog = window.api.onAppLog((newLog: AppLog) => {
         setLogs((prev) => [...prev, newLog])
       })
     }
     if (window.api && window.api.onProfileOpened) {
-      window.api.onProfileOpened((info: any) => {
+      cleanupProfileOpened = window.api.onProfileOpened((info: any) => {
         setOpenedProfiles(prev => {
           // Prevent duplicates if same windowId comes in
           if (prev.find(p => p.windowId === info.windowId)) return prev;
@@ -48,6 +51,11 @@ function App(): React.JSX.Element {
         });
       });
     }
+
+    return () => {
+      if (cleanupAppLog) cleanupAppLog();
+      if (cleanupProfileOpened) cleanupProfileOpened();
+    };
   }, [])
 
   useEffect(() => {
@@ -67,10 +75,18 @@ function App(): React.JSX.Element {
 
   const handleCloseProfileWindow = async (windowId: number) => {
     if (window.api && window.api.closeChromeWindow) {
-      const success = await window.api.closeChromeWindow(windowId);
-      if (success) {
-        setOpenedProfiles(prev => prev.filter(p => p.windowId !== windowId));
+      try {
+        const success = await window.api.closeChromeWindow(windowId);
+        if (success) {
+          setOpenedProfiles(prev => prev.filter(p => p.windowId !== windowId));
+        } else {
+          alert(`Failed to close window ${windowId} (success=false)`);
+        }
+      } catch (e: any) {
+        alert("IPC error: " + e.message);
       }
+    } else {
+      alert('window.api.closeChromeWindow not found');
     }
   };
 
