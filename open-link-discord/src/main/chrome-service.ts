@@ -94,11 +94,26 @@ export function openUrlInChrome(url: string, profileDir: string, bounds?: { x: n
         }
 
         if (platform === 'darwin') {
-            command = `open -na "Google Chrome" --args --new-window --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
+            const globalPath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+            const userPath = path.join(os.homedir(), 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome')
+            const chromeBinary = fs.existsSync(globalPath) ? globalPath : fs.existsSync(userPath) ? userPath : null
+            if (chromeBinary) {
+                if (bounds) {
+                    // Direct binary invocation uses Chromium IPC (opens new window when bounds or multiple profiles are used)
+                    command = `"${chromeBinary}" --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
+                } else {
+                    // Single profile handling: to reliably open a new tab instead of a new window on macOS,
+                    // we bring the target profile window to the front first, then use AppleScript to open the URL in a new tab.
+                    const safeUrl = url.replace(/'/g, "'\\''");
+                    command = `"${chromeBinary}" --profile-directory="${profileDir}" & sleep 0.5 && osascript -e 'tell application "Google Chrome" to open location "${safeUrl}"'`
+                }
+            } else {
+                command = `open -n -a "Google Chrome" --args --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
+            }
         } else if (platform === 'win32') {
-            command = `start chrome --new-window --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
+            command = `start chrome --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
         } else {
-            command = `google-chrome --new-window --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
+            command = `google-chrome --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
         }
 
         exec(command, (error: any) => {

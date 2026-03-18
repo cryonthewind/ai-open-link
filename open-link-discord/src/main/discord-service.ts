@@ -136,8 +136,9 @@ function matchesKeywords(text: string, keywords: string[]): boolean {
 const rawMessageCache = new Map<string, any>();
 const urlRateLimitCache = new Map<string, number>();
 const processedMessageCache = new Map<string, number>();
+const messageContentCache = new Map<string, number>();
 
-const messageProcessQueue: Array<() => Promise<void>> = [];
+const messageProcessQueue: Array<() => Promise<boolean | void>> = [];
 let isMessageQueueProcessing = false;
 
 async function processMessageQueue() {
@@ -147,7 +148,12 @@ async function processMessageQueue() {
         const task = messageProcessQueue.shift();
         if (task) {
             try {
-                await task();
+                const didOpenWindow = await task();
+                if (didOpenWindow) {
+                    // Nếu thực sự có mở URL, nghỉ 2 giây rồi mới xử lý tin nhắn tiếp theo
+                    // để tránh mở cả chục tab cùng một lúc gây nghẽn máy
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
             } catch (e) {
                 console.error("Task queue error", e);
             }
@@ -384,8 +390,10 @@ export async function connectDiscord(token: string) {
 
 
 
-        // Deduplicate URLs
-        urls = [...new Set(urls)]
+        // Deduplicate URLs and ignore Discord's internal/avatar URLs
+        let uniqueUrls = [...new Set(urls)]
+        uniqueUrls = uniqueUrls.filter(u => !u.includes('discord.com/') && !u.includes('discordapp.com/') && !u.includes('discordapp.net/'));
+        urls = uniqueUrls;
 
         // 2. Check keywords (Whitelist)
         const keywords = currentSettings.keywords || []
@@ -421,7 +429,18 @@ export async function connectDiscord(token: string) {
             const lastOpened = urlRateLimitCache.get(urlToOpen);
             if (lastOpened && now - lastOpened < RATE_LIMIT_MS) {
                 dispatchLog(`Ignored (Queue): URL ${urlToOpen} was already opened within the last 3 minutes.`, 'warning');
-                return;
+                return false;
+            }
+
+            // Also check message content to prevent duplicate triggers from identical messages without catching URL changes
+            const contentHash = fullText.replace(/[\\s\\d]/g, '').substring(0, 400);
+            if (contentHash.length > 10) {
+                const lastContentTime = messageContentCache.get(contentHash);
+                if (lastContentTime && now - lastContentTime < RATE_LIMIT_MS) {
+                    dispatchLog(`Ignored (Queue): Identical message content was already processed within the last 3 minutes.`, 'warning');
+                    return false;
+                }
+                messageContentCache.set(contentHash, now);
             }
 
             // Immediately reserve this URL in the cache synchronously
@@ -431,6 +450,11 @@ export async function connectDiscord(token: string) {
             for (const [cachedUrl, timestamp] of urlRateLimitCache.entries()) {
                 if (now - timestamp > RATE_LIMIT_MS) {
                     urlRateLimitCache.delete(cachedUrl);
+                }
+            }
+            for (const [cachedHash, timestamp] of messageContentCache.entries()) {
+                if (now - timestamp > RATE_LIMIT_MS) {
+                    messageContentCache.delete(cachedHash);
                 }
             }
 
@@ -444,10 +468,10 @@ export async function connectDiscord(token: string) {
 
             if (profileIds.length === 0) {
                 dispatchLog('Matching message found, but no target Chrome profile is selected.', 'warning')
-                return
+                return false;
             }
 
-            dispatchLog(`Opening ${urls.length} URL(s) in ${profileIds.length} profile(s): ${profileIds.join(', ')}`, 'success')
+            dispatchLog(`Opening URL (${urlToOpen}) in ${profileIds.length} profile(s): ${profileIds.join(', ')}`, 'success')
 
             const totalProfiles = profileIds.length;
             let screenW = 1920;
@@ -496,6 +520,7 @@ export async function connectDiscord(token: string) {
                     profileNames: currentSettings.targetProfileNames || []
                 })
             }
+            return true; // Báo hiệu đã mở cửa sổ thành công để Queue nghỉ 2 giây
         });
 
         // Trigger the queue processing
