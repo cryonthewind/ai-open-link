@@ -10,6 +10,12 @@ export interface SettingsType {
     targetProfileNames: string[]
     logServerUrl: string | null
     testLinks: { product: string; url: string }[]
+    // 7net Zaiko Settings
+    zaikoUrl?: string
+    zaikoEmail?: string
+    zaikoPassword?: string
+    zaikoCookie?: string
+    zaikoDiscord?: string
 }
 
 export interface ChromeProfile {
@@ -43,6 +49,17 @@ export interface IElectronAPI {
     closeChromeWindow: (windowId: number) => Promise<boolean>
     closeAllChromeWindows: (windowIds: number[]) => Promise<boolean>
     closeApp: () => Promise<boolean>
+    openUrlInChrome: (url: string, profileId: string) => Promise<{ success: boolean; windowId?: number }>
+    
+    // 7net Zaiko API Integration
+    login7net: (creds: { email?: string; password?: string }) => Promise<{ success: boolean; cookie?: string; error?: string }>
+    startMonitoring: (config: { url: string; email?: string; password?: string; cookie?: string; discord?: string }) => void
+    stopMonitoring: () => void
+    
+    // Event Listeners for Zaiko
+    onLogMessage: (callback: (event: any, msg: string) => void) => (() => void)
+    onStatusChange: (callback: (event: any, status: string) => void) => (() => void)
+    onCookieUpdated: (callback: (event: any, cookie: string) => void) => (() => void)
 }
 
 export interface AppLog {
@@ -57,4 +74,3 @@ declare global {
         api: IElectronAPI
     }
 }
-

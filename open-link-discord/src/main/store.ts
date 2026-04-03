@@ -10,6 +10,12 @@ export interface AppSettings {
   targetProfileNames: string[]
   logServerUrl: string | null
   testLinks: { product: string; url: string }[]
+  // 7net Zaiko Settings
+  zaikoUrl?: string
+  zaikoEmail?: string
+  zaikoPassword?: string
+  zaikoCookie?: string
+  zaikoDiscord?: string
 }
 
 const schema = {
@@ -48,6 +54,26 @@ const schema = {
   testLinks: {
     type: 'array',
     default: []
+  },
+  zaikoUrl: {
+    type: 'string',
+    default: ''
+  },
+  zaikoEmail: {
+    type: 'string',
+    default: ''
+  },
+  zaikoPassword: {
+    type: 'string',
+    default: ''
+  },
+  zaikoCookie: {
+    type: 'string',
+    default: ''
+  },
+  zaikoDiscord: {
+    type: 'string',
+    default: ''
   }
 } as const;
 

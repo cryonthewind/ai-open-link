@@ -23,6 +23,29 @@ const api = {
   closeChromeWindow: (windowId: number) => ipcRenderer.invoke('close-chrome-window', windowId),
   closeAllChromeWindows: (windowIds: number[]) => ipcRenderer.invoke('close-all-chrome-windows', windowIds),
   closeApp: () => ipcRenderer.invoke('close-app'),
+  openUrlInChrome: (url: string, profileId: string) => ipcRenderer.invoke('open-url-in-chrome', url, profileId),
+
+  // 7net Zaiko Integrations
+  login7net: (creds: any) => ipcRenderer.invoke('login-7net', creds),
+  startMonitoring: (config: any) => ipcRenderer.send('start-monitoring', config),
+  stopMonitoring: () => ipcRenderer.send('stop-monitoring'),
+
+  // Event Listeners for 7net
+  onLogMessage: (callback: any) => {
+    const fn = (_event: any, msg: string) => callback(_event, msg)
+    ipcRenderer.on('log-message', fn)
+    return () => ipcRenderer.off('log-message', fn)
+  },
+  onStatusChange: (callback: any) => {
+    const fn = (_event: any, status: string) => callback(_event, status)
+    ipcRenderer.on('status-change', fn)
+    return () => ipcRenderer.off('status-change', fn)
+  },
+  onCookieUpdated: (callback: any) => {
+    const fn = (_event: any, cookie: string) => callback(_event, cookie)
+    ipcRenderer.on('cookie-updated', fn)
+    return () => ipcRenderer.off('cookie-updated', fn)
+  }
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

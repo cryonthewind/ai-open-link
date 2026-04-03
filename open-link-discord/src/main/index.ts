@@ -5,14 +5,18 @@ import icon from '../../resources/icon.png?asset'
 import { store, initStore, AppSettings } from './store'
 import { getChromeProfiles, openUrlInChrome, closeChromeWindow, closeAllChromeWindows } from './chrome-service'
 import { connectDiscord, disconnectDiscord, getGuildsAndChannels, sendWebhookLog, testReadLatestMessage } from './discord-service'
+import { initZaikoService, run7netLogin, startMonitoring, stopMonitoring } from './zaiko-service'
 
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1000,
+    height: 750,
     show: false,
     autoHideMenuBar: true,
+    backgroundColor: '#00000000', // Fully transparent
+    vibrancy: 'under-window',    // macOS vibrancy effect
+    visualEffectState: 'active',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -20,9 +24,11 @@ function createWindow(): void {
     }
   })
 
+  // Initialize Zaiko Service with this window
+  initZaikoService(mainWindow)
+
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
-    mainWindow.webContents.openDevTools()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -115,6 +121,19 @@ if (!gotTheLock) {
 
     ipcMain.handle('test-read-latest-message', async () => {
       return await testReadLatestMessage()
+    })
+
+    // IPC for Zaiko Service (7ID Integrated)
+    ipcMain.handle('login-7net', async (_, creds) => {
+      return await run7netLogin(creds)
+    })
+
+    ipcMain.on('start-monitoring', (_, config) => {
+      startMonitoring(config)
+    })
+
+    ipcMain.on('stop-monitoring', () => {
+      stopMonitoring('Monitoring halted manually.')
     })
 
     ipcMain.handle('close-app', () => {

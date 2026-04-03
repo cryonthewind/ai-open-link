@@ -98,17 +98,13 @@ export function openUrlInChrome(url: string, profileDir: string, bounds?: { x: n
             const userPath = path.join(os.homedir(), 'Applications', 'Google Chrome.app', 'Contents', 'MacOS', 'Google Chrome')
             const chromeBinary = fs.existsSync(globalPath) ? globalPath : fs.existsSync(userPath) ? userPath : null
             if (chromeBinary) {
-                if (bounds) {
-                    // Direct binary invocation uses Chromium IPC (opens new window when bounds or multiple profiles are used)
-                    command = `"${chromeBinary}" --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
-                } else {
-                    // Single profile handling: to reliably open a new tab instead of a new window on macOS,
-                    // we bring the target profile window to the front first, then use AppleScript to open the URL in a new tab.
-                    const safeUrl = url.replace(/'/g, "'\\''");
-                    command = `"${chromeBinary}" --profile-directory="${profileDir}" & sleep 0.5 && osascript -e 'tell application "Google Chrome" to open location "${safeUrl}"'`
-                }
+                // Use --new-tab: if a Chrome window with this profile is already open,
+                // Chrome will open the URL in a new tab in that window.
+                // If not open yet, Chrome will open a new window for this profile.
+                const safeUrl = url.replace(/"/g, '\\"')
+                command = `"${chromeBinary}" --profile-directory="${profileDir}" ${boundsArgs}--new-tab "${safeUrl}"`
             } else {
-                command = `open -n -a "Google Chrome" --args --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
+                command = `open -a "Google Chrome" --args --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
             }
         } else if (platform === 'win32') {
             command = `start chrome --profile-directory="${profileDir}" ${boundsArgs}"${url}"`
@@ -121,28 +117,25 @@ export function openUrlInChrome(url: string, profileDir: string, bounds?: { x: n
                 console.error(`Error opening Chrome: ${error.message}`)
                 resolve({ success: false })
             } else {
-                if (platform === 'darwin') {
-                    // Give Chrome a moment to open and focus, then force resize via AppleScript
-                    setTimeout(() => {
-                        let script = ''
-                        if (bounds) {
-                            script += `set bounds of front window to {${Math.round(bounds.x)}, ${Math.round(bounds.y)}, ${Math.round(bounds.x + bounds.width)}, ${Math.round(bounds.y + bounds.height)}}\n`
-                        }
-                        script += `get id of front window`
+                // Return success immediately to the UI so it feels instant
+                resolve({ success: true })
 
-                        const fullScript = `tell application "Google Chrome"\n${script}\nend tell`
-                        exec(`osascript -e '${fullScript}'`, (scriptError: any, stdout: string) => {
+                // Window ID tracking (macOS only) can happen in the background if bounds are provided
+                if (platform === 'darwin' && bounds) {
+                    setTimeout(() => {
+                        const script = `tell application "Google Chrome"
+                            set bounds of front window to {${Math.round(bounds.x)}, ${Math.round(bounds.y)}, ${Math.round(bounds.x + bounds.width)}, ${Math.round(bounds.y + bounds.height)}}
+                            get id of front window
+                        end tell`
+                        
+                        exec(`osascript -e '${script}'`, (scriptError: any, _stdout: string) => {
                             if (scriptError) {
-                                console.error(`Error getting Chrome window ID: ${scriptError.message}`)
-                                resolve({ success: true })
-                            } else {
-                                const windowId = parseInt(stdout.trim(), 10)
-                                resolve({ success: true, windowId: isNaN(windowId) ? undefined : windowId });
+                                console.error(`Background window ID retrieval failed (ignoring): ${scriptError.message}`)
+                                // The windowId is retrieved via osascript but currently not used.
+                                // We could dispatch an event here if needed.
                             }
                         });
-                    }, 800);
-                } else {
-                    resolve({ success: true })
+                    }, 500);
                 }
             }
         })

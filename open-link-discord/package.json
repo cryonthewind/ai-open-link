@@ -23,9 +23,13 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "axios": "^1.14.0",
+    "cheerio": "^1.2.0",
     "debug": "^4.4.3",
     "discord.js-selfbot-v13": "^3.7.1",
-    "electron-store": "^11.0.2"
+    "electron-store": "^11.0.2",
+    "open": "^11.0.0",
+    "random-useragent": "^0.5.0"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
