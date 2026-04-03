@@ -4,7 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { store, initStore, AppSettings } from './store'
 import { getChromeProfiles, openUrlInChrome, closeChromeWindow, closeAllChromeWindows } from './chrome-service'
-import { connectDiscord, disconnectDiscord, getGuildsAndChannels, sendWebhookLog, testReadLatestMessage } from './discord-service'
+import { initDiscordService, connectDiscord, disconnectDiscord, getGuildsAndChannels, sendWebhookLog, testReadLatestMessage } from './discord-service'
 import { initZaikoService, run7netLogin, startMonitoring, stopMonitoring } from './zaiko-service'
 
 function createWindow(): void {
@@ -24,8 +24,9 @@ function createWindow(): void {
     }
   })
 
-  // Initialize Zaiko Service with this window
+  // Initialize Services with this window
   initZaikoService(mainWindow)
+  initDiscordService(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -168,7 +169,18 @@ if (!gotTheLock) {
     if (!isQuitting) {
       e.preventDefault();
       isQuitting = true;
-      await sendWebhookLog(store.store, 'stop');
+      
+      // Perform final logs with a timeout to prevent hanging
+      try {
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 3000));
+        await Promise.race([
+          sendWebhookLog(store.store, 'stop'),
+          timeoutPromise
+        ]);
+      } catch (err) {
+        console.error('Failed to send exit webhook:', err);
+      }
+      
       app.quit();
     }
   });

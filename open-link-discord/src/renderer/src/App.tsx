@@ -39,7 +39,8 @@ function App(): React.JSX.Element {
   } = useAppData()
 
   const [activeScreen, setActiveScreen] = useState('dashboard')
-  const [logs, setLogs] = useState<AppLog[]>([])
+  const [systemLogs, setSystemLogs] = useState<AppLog[]>([])
+  const [zaikoLogs, setZaikoLogs] = useState<AppLog[]>([])
   const logsEndRef = useRef<HTMLDivElement>(null)
   const [iconError, setIconError] = useState(false)
 
@@ -59,6 +60,7 @@ function App(): React.JSX.Element {
   const [timerRemaining, setTimerRemaining] = useState<number | null>(null)
   const timerIntervalRef = useRef<any>(null)
   const hasAutoStartedRef = useRef(false)
+  const isTerminatedRef = useRef(false)
 
   // 7net Zaiko State
   const [zaikoUrl, setZaikoUrl] = useState('')
@@ -82,18 +84,33 @@ function App(): React.JSX.Element {
     }
   }, [loading]) // Only sync once on load
 
-  // IPC Listeners for 7net
+  // IPC Listeners for 7net and Discord
   useEffect(() => {
-    const handleLog = (_event: any, msg: string) => addLocalLog(msg, msg.includes('✅') || msg.includes('🎉') ? 'success' : msg.includes('❌') ? 'error' : 'info')
+    const handleLog = (_event: any, msg: string) => {
+      const type = (msg.includes('✅') || msg.includes('🎉') ? 'success' : msg.includes('❌') ? 'error' : 'info') as any
+      setZaikoLogs(prev => [...prev, { timestamp: new Date().toISOString(), message: msg, type }].slice(-100))
+    }
+    const handleDiscordLog = (log: AppLog) => {
+      console.log('[Renderer] Received App Log:', log)
+      setSystemLogs(prev => [...prev, log].slice(-100))
+    }
     const handleStatus = (_event: any, status: string) => setIsZaikoMonitoring(status === 'running')
     const handleCookie = (_event: any, cookie: string) => {
       setZaikoCookie(cookie)
       updateSettings({ zaikoCookie: cookie })
     }
 
-    if (window.api.onLogMessage) window.api.onLogMessage(handleLog)
-    if (window.api.onStatusChange) window.api.onStatusChange(handleStatus)
-    if (window.api.onCookieUpdated) window.api.onCookieUpdated(handleCookie)
+    const unsubLog = window.api.onLogMessage ? window.api.onLogMessage(handleLog) : null
+    const unsubAppLog = window.api.onAppLog ? window.api.onAppLog(handleDiscordLog) : null
+    const unsubStatus = window.api.onStatusChange ? window.api.onStatusChange(handleStatus) : null
+    const unsubCookie = window.api.onCookieUpdated ? window.api.onCookieUpdated(handleCookie) : null
+
+    return () => {
+      if (unsubLog) unsubLog()
+      if (unsubAppLog) unsubAppLog()
+      if (unsubStatus) unsubStatus()
+      if (unsubCookie) unsubCookie()
+    }
   }, [])
 
   const filteredProfiles = useMemo(() => {
@@ -112,14 +129,19 @@ function App(): React.JSX.Element {
     )
   }, [settings?.testLinks, linkSearch])
 
-  const addLocalLog = (message: string, type: 'info' | 'error' | 'success' = 'info') => {
-    setLogs(prev => [...prev, { timestamp: new Date().toISOString(), message, type }].slice(-100))
+  const addLocalLog = (message: string, type: 'info' | 'error' | 'success' = 'info', target: 'system' | 'zaiko' = 'system') => {
+    const log = { timestamp: new Date().toISOString(), message, type }
+    if (target === 'zaiko') {
+      setZaikoLogs(prev => [...prev, log].slice(-100))
+    } else {
+      setSystemLogs(prev => [...prev, log].slice(-100))
+    }
   }
 
   // Latest logs stay at the top naturally by removing automatic bottom-alignment scrolling.
 
   useEffect(() => {
-    if (!loading && settings && !hasAutoStartedRef.current) {
+    if (!loading && settings && !hasAutoStartedRef.current && !isTerminatedRef.current) {
       const minutes = parseFloat(timerInput || '300')
       if (!isNaN(minutes) && minutes > 0) {
         handleStartTimer(minutes)
@@ -129,7 +151,8 @@ function App(): React.JSX.Element {
   }, [loading, settings])
 
   useEffect(() => {
-    if (timerRemaining !== null && timerRemaining <= 0) {
+    if (timerRemaining !== null && timerRemaining <= 0 && !isTerminatedRef.current) {
+      isTerminatedRef.current = true
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
       window.api.closeApp()
     }
@@ -158,8 +181,16 @@ function App(): React.JSX.Element {
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
     const totalSeconds = Math.floor(minutes * 60)
     setTimerRemaining(totalSeconds)
+    isTerminatedRef.current = false
     timerIntervalRef.current = setInterval(() => {
-      setTimerRemaining(prev => prev !== null ? prev - 1 : null)
+      setTimerRemaining(prev => {
+        if (prev === null) return null
+        if (prev <= 1) {
+          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
+          return 0
+        }
+        return prev - 1
+      })
     }, 1000)
     addLocalLog(`TIMER_ARMED: Purge set to ${minutes}m.`, 'success')
   }
@@ -198,12 +229,17 @@ function App(): React.JSX.Element {
       addLocalLog('ERROR: No active nodes selected.', 'error')
       return
     }
-    addLocalLog(`INJECTING_RESOURCE: ${product.toUpperCase()}...`, 'info')
+    addLocalLog(`[Direct] Manual injection of "${product}" initiated...`, 'info')
     try {
       const results = await Promise.all(selectedIds.map(pId => window.api.openUrlInChrome(url, pId)))
-      addLocalLog(`INJECTION_COMPLETE: ${results.filter(r => r.success).length}/${selectedIds.length} successful.`, 'success')
+      const successCount = results.filter(r => r.success).length
+      if (successCount > 0) {
+        addLocalLog(`[Direct] Successfully deployed "${product}" to ${successCount} node(s).`, 'success')
+      } else {
+        addLocalLog(`[Direct] Deployment of "${product}" failed on all nodes.`, 'error')
+      }
     } catch (err: any) {
-      addLocalLog(`SYSTEM_FAILURE: ${err.message}`, 'error')
+      addLocalLog(`[Direct] Critical system failure during manual injection: ${err.message}`, 'error', 'system')
     }
   }
 
@@ -212,7 +248,7 @@ function App(): React.JSX.Element {
     updateSettings({
       zaikoUrl, zaikoEmail, zaikoPassword, zaikoCookie, zaikoDiscord
     })
-    addLocalLog('7NET_ARCHIVE_SECURED: Config updated.', 'success')
+    addLocalLog('7NET_ARCHIVE_SECURED: Config updated.', 'success', 'zaiko')
   }
 
   const handleStartZaikoManual = () => {
@@ -220,25 +256,25 @@ function App(): React.JSX.Element {
     handleSaveZaikoConfig()
     window.api.startMonitoring({ url: zaikoUrl, email: zaikoEmail, password: zaikoPassword, cookie: zaikoCookie, discord: zaikoDiscord })
     setIsZaikoMonitoring(true)
-    addLocalLog('7NET_ANALYSIS_ACTIVE: Initiating stock scan...', 'info')
+    addLocalLog('7NET_ANALYSIS_ACTIVE: Initiating stock scan...', 'info', 'zaiko')
   }
 
   const handleStopZaikoManual = () => {
     window.api.stopMonitoring()
     setIsZaikoMonitoring(false)
-    addLocalLog('7NET_OPERATION_HALTED: User manual stop.', 'info')
+    addLocalLog('7NET_OPERATION_HALTED: User manual stop.', 'info', 'zaiko')
   }
 
   const handleZaikoLogin = async () => {
-    addLocalLog('7NET_LOGIN_WINDOW_OPENED: Intercepting session...', 'info')
+    addLocalLog('7NET_LOGIN_WINDOW_OPENED: Intercepting session...', 'info', 'zaiko')
     const result = await window.api.login7net({ email: zaikoEmail, password: zaikoPassword })
     if (result.success) {
       const cookie = result.cookie || ''
       setZaikoCookie(cookie)
       updateSettings({ zaikoCookie: cookie })
-      addLocalLog('7NET_SESSION_CAPTURED: User identity verified.', 'success')
+      addLocalLog('7NET_SESSION_CAPTURED: User identity verified.', 'success', 'zaiko')
     } else {
-      addLocalLog(`7NET_LOGIN_ABORTED: ${result.error}`, 'error')
+      addLocalLog(`7NET_LOGIN_ABORTED: ${result.error}`, 'error', 'zaiko')
     }
   }
 
@@ -353,10 +389,10 @@ function App(): React.JSX.Element {
               <div className="card">
                 <h2>[ Master Stream Logic ]</h2>
                 <div className="log-container">
-                  {[...logs].reverse().map((l, i) => (
+                  {[...systemLogs].reverse().map((l, i) => (
                     <div key={i} className="log-entry">
                       <span className="log-time">{new Date(l.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                      <span className={l.type === 'error' ? 'log-error' : l.type === 'success' ? 'log-success' : 'log-info'}>{l.message.toUpperCase()}</span>
+                      <span className={l.type === 'error' ? 'log-error' : l.type === 'success' ? 'log-success' : 'log-info'}>{l.message}</span>
                     </div>
                   ))}
                   <div ref={logsEndRef} />
@@ -410,10 +446,10 @@ function App(): React.JSX.Element {
                 </button>
               </div>
               <div className="log-container">
-                  {[...logs].reverse().map((l, i) => (
+                  {[...zaikoLogs].reverse().map((l, i) => (
                     <div key={i} className="log-entry">
                       <span className="log-time">{new Date(l.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                      <span className={l.type === 'error' ? 'log-error' : l.type === 'success' ? 'log-success' : 'log-info'}>{l.message.toUpperCase()}</span>
+                      <span className={l.type === 'error' ? 'log-error' : l.type === 'success' ? 'log-success' : 'log-info'}>{l.message}</span>
                     </div>
                   ))}
                   <div ref={logsEndRef} />

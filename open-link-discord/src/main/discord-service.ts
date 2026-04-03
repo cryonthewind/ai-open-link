@@ -6,15 +6,27 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 
+let mainWindow: BrowserWindow | null = null
+
+export function initDiscordService(win: BrowserWindow) {
+    mainWindow = win
+}
+
 export function dispatchLog(message: string, type: 'info' | 'error' | 'success' | 'warning' = 'info') {
     const log = {
-        timestamp: new Date().toLocaleTimeString(),
-        message,
+        timestamp: new Date().toISOString(),
+        message: String(message), // Ensure it's a string
         type
     }
-    BrowserWindow.getAllWindows().forEach(w => {
-        w.webContents.send('app-log', log)
-    })
+    
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app-log', log)
+    } else {
+        BrowserWindow.getAllWindows().forEach(w => {
+            if (!w.isDestroyed()) w.webContents.send('app-log', log)
+        })
+    }
+
     if (type === 'error') console.error(message)
     else if (type === 'warning') console.warn(message)
     else console.log(message)
@@ -120,17 +132,21 @@ export async function sendWebhookLog(currentSettings: any, type: 'link' | 'start
 
 /**
  * Checks if the text contains any of the provided keywords (ignoring spaces and case).
+ * Returns the matched keyword if found, otherwise null.
  */
-function matchesKeywords(text: string, keywords: string[]): boolean {
-    if (!keywords || keywords.length === 0) return false
+function getMatchedKeyword(text: string, keywords: string[]): string | null {
+    if (!keywords || keywords.length === 0) return null
 
     // Remove all whitespace characters (spaces, newlines, tabs) for robust matching
     const normalizedText = text.toLowerCase().replace(/\s+/g, '')
 
-    return keywords.some(keyword => {
+    for (const keyword of keywords) {
         const normalizedKeyword = keyword.toLowerCase().replace(/\s+/g, '')
-        return normalizedText.includes(normalizedKeyword)
-    })
+        if (normalizedKeyword && normalizedText.includes(normalizedKeyword)) {
+            return keyword
+        }
+    }
+    return null
 }
 
 const rawMessageCache = new Map<string, any>();
@@ -397,21 +413,23 @@ export async function connectDiscord(token: string) {
 
         // 2. Check keywords (Whitelist)
         const keywords = currentSettings.keywords || []
-        if (!matchesKeywords(fullText, keywords)) {
-            dispatchLog(`Ignored: No whitelist keywords matched.`, 'warning')
+        const matchedWhitelist = getMatchedKeyword(fullText, keywords)
+        if (!matchedWhitelist) {
+            dispatchLog(`Ignored: No whitelist keywords matched. Keywords: [${keywords.join(', ')}]`, 'warning')
             return
         }
 
         // 2.5 Check Blocklist
         const blacklistKeywords = currentSettings.blacklistKeywords || []
-        if (matchesKeywords(fullText, blacklistKeywords)) {
-            dispatchLog(`Ignored: Hit blacklist keyword.`, 'warning')
+        const matchedBlacklist = getMatchedKeyword(fullText, blacklistKeywords)
+        if (matchedBlacklist) {
+            dispatchLog(`Ignored: Hit blacklist keyword "${matchedBlacklist}".`, 'warning')
             return
         }
 
         // 3. Extract URLs
         if (urls.length === 0) {
-            dispatchLog(`Ignored: No URLs found in message.`, 'warning')
+            dispatchLog(`Ignored: Whitelist matched ("${matchedWhitelist}"), but no URLs found in message.`, 'warning')
             return
         }
 
@@ -428,16 +446,18 @@ export async function connectDiscord(token: string) {
             // Check the cache again inside the serial queue block
             const lastOpened = urlRateLimitCache.get(urlToOpen);
             if (lastOpened && now - lastOpened < RATE_LIMIT_MS) {
-                dispatchLog(`Ignored (Queue): URL ${urlToOpen} was already opened within the last 3 minutes.`, 'warning');
+                const remainingSecs = Math.ceil((RATE_LIMIT_MS - (now - lastOpened)) / 1000);
+                dispatchLog(`Ignored (Queue): URL and resource node already active. Cooldown: ${remainingSecs}s remaining.`, 'warning');
                 return false;
             }
 
             // Also check message content to prevent duplicate triggers from identical messages without catching URL changes
-            const contentHash = fullText.replace(/[\\s\\d]/g, '').substring(0, 400);
+            const contentHash = fullText.replace(/[\s\d]/g, '').substring(0, 400);
             if (contentHash.length > 10) {
                 const lastContentTime = messageContentCache.get(contentHash);
                 if (lastContentTime && now - lastContentTime < RATE_LIMIT_MS) {
-                    dispatchLog(`Ignored (Queue): Identical message content was already processed within the last 3 minutes.`, 'warning');
+                    const remainingSecs = Math.ceil((RATE_LIMIT_MS - (now - lastContentTime)) / 1000);
+                    dispatchLog(`Ignored (Queue): Identical message content detected. Cooldown: ${remainingSecs}s remaining.`, 'warning');
                     return false;
                 }
                 messageContentCache.set(contentHash, now);
@@ -497,7 +517,7 @@ export async function connectDiscord(token: string) {
                         height: screenH
                     } : undefined;
 
-                    const { success, windowId } = await openUrlInChrome(url, profileId, bounds)
+                    const { success, windowId, error } = await openUrlInChrome(url, profileId, bounds)
 
                     if (success && windowId) {
                         const profileName = (currentSettings as any).targetProfileNames?.[index] || profileId;
@@ -510,6 +530,8 @@ export async function connectDiscord(token: string) {
                                 timestamp: Date.now()
                             });
                         });
+                    } else if (!success) {
+                        dispatchLog(`Failed to open URL in profile ${profileId}: ${error || 'Unknown error'}`, 'error')
                     }
                 }
 

@@ -81,7 +81,7 @@ export function getChromeProfiles(): ChromeProfile[] {
  * Works natively on macOS. Needs adaptation for Windows/Linux if required.
  * Returns the window ID of the opened Chrome window (macOS only) for tracking.
  */
-export function openUrlInChrome(url: string, profileDir: string, bounds?: { x: number; y: number; width: number; height: number }): Promise<{ success: boolean; windowId?: number }> {
+export function openUrlInChrome(url: string, profileDir: string, bounds?: { x: number; y: number; width: number; height: number }): Promise<{ success: boolean; windowId?: number; error?: string }> {
     return new Promise((resolve) => {
         const { exec } = require('child_process')
         const platform = os.platform()
@@ -115,7 +115,7 @@ export function openUrlInChrome(url: string, profileDir: string, bounds?: { x: n
         exec(command, (error: any) => {
             if (error) {
                 console.error(`Error opening Chrome: ${error.message}`)
-                resolve({ success: false })
+                resolve({ success: false, error: error.message })
             } else {
                 // Return success immediately to the UI so it feels instant
                 resolve({ success: true })
