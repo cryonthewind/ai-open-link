@@ -58,9 +58,7 @@ function App(): React.JSX.Element {
   // Timer State
   const [timerInput, setTimerInput] = useState<string>('300')
   const [timerRemaining, setTimerRemaining] = useState<number | null>(null)
-  const timerIntervalRef = useRef<any>(null)
   const hasAutoStartedRef = useRef(false)
-  const isTerminatedRef = useRef(false)
 
   // 7net Zaiko State
   const [zaikoUrl, setZaikoUrl] = useState('')
@@ -104,12 +102,17 @@ function App(): React.JSX.Element {
     const unsubAppLog = window.api.onAppLog ? window.api.onAppLog(handleDiscordLog) : null
     const unsubStatus = window.api.onStatusChange ? window.api.onStatusChange(handleStatus) : null
     const unsubCookie = window.api.onCookieUpdated ? window.api.onCookieUpdated(handleCookie) : null
+    const unsubTimer = window.api.onTimerTick ? window.api.onTimerTick((remaining) => {
+      setTimerRemaining(remaining)
+    }) : null
+
 
     return () => {
       if (unsubLog) unsubLog()
       if (unsubAppLog) unsubAppLog()
       if (unsubStatus) unsubStatus()
       if (unsubCookie) unsubCookie()
+      if (unsubTimer) unsubTimer()
     }
   }, [])
 
@@ -140,23 +143,32 @@ function App(): React.JSX.Element {
 
   // Latest logs stay at the top naturally by removing automatic bottom-alignment scrolling.
 
+  const [isTimerSynced, setIsTimerSynced] = useState(false)
+
   useEffect(() => {
-    if (!loading && settings && !hasAutoStartedRef.current && !isTerminatedRef.current) {
+    if (window.api.getTimerRemaining) {
+      window.api.getTimerRemaining().then(remaining => {
+        if (remaining !== null) {
+          setTimerRemaining(remaining)
+          hasAutoStartedRef.current = true
+        }
+        setIsTimerSynced(true)
+      })
+    } else {
+      setIsTimerSynced(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!loading && settings && isTimerSynced && !hasAutoStartedRef.current) {
       const minutes = parseFloat(timerInput || '300')
       if (!isNaN(minutes) && minutes > 0) {
         handleStartTimer(minutes)
         hasAutoStartedRef.current = true
       }
     }
-  }, [loading, settings])
+  }, [loading, settings, isTimerSynced])
 
-  useEffect(() => {
-    if (timerRemaining !== null && timerRemaining <= 0 && !isTerminatedRef.current) {
-      isTerminatedRef.current = true
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-      window.api.closeApp()
-    }
-  }, [timerRemaining])
 
   const handleConnect = () => {
     if (!settings) return
@@ -178,20 +190,7 @@ function App(): React.JSX.Element {
   const handleStartTimer = (customMinutes?: number) => {
     const minutes = customMinutes ?? parseFloat(timerInput)
     if (isNaN(minutes) || minutes <= 0) return
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-    const totalSeconds = Math.floor(minutes * 60)
-    setTimerRemaining(totalSeconds)
-    isTerminatedRef.current = false
-    timerIntervalRef.current = setInterval(() => {
-      setTimerRemaining(prev => {
-        if (prev === null) return null
-        if (prev <= 1) {
-          if (timerIntervalRef.current) clearInterval(timerIntervalRef.current)
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
+    window.api.startTimer(minutes)
     addLocalLog(`TIMER_ARMED: Purge set to ${minutes}m.`, 'success')
   }
 

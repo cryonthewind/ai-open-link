@@ -6,6 +6,7 @@ import { store, initStore, AppSettings } from './store'
 import { getChromeProfiles, openUrlInChrome, closeChromeWindow, closeAllChromeWindows } from './chrome-service'
 import { initDiscordService, connectDiscord, disconnectDiscord, getGuildsAndChannels, sendWebhookLog, testReadLatestMessage } from './discord-service'
 import { initZaikoService, run7netLogin, startMonitoring, stopMonitoring } from './zaiko-service'
+import { initTimerService } from './timer-service'
 
 function createWindow(): void {
   // Create the browser window.
@@ -27,6 +28,7 @@ function createWindow(): void {
   // Initialize Services with this window
   initZaikoService(mainWindow)
   initDiscordService(mainWindow)
+  initTimerService(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

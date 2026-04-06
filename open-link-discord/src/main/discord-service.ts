@@ -46,6 +46,39 @@ function extractUrls(text: string): string[] {
 }
 
 /**
+ * Normalizes a URL for deduplication purposes.
+ * Handles trailing slashes, site-specific variations (like Yodobashi's /ec/), 
+ * and removes query parameters if they don't seem like product identifiers.
+ */
+function normalizeUrl(url: string): string {
+    if (!url) return '';
+    try {
+        const urlObj = new URL(url);
+        let hostname = urlObj.hostname.toLowerCase().replace(/^www\./, '');
+        let pathname = urlObj.pathname.replace(/\/+$/, '');
+
+        // Site-specific normalizations
+        if (hostname.includes('yodobashi.com')) {
+            // Yodobashi uses /ec/product/ and /product/ interchangeably
+            pathname = pathname.replace(/^\/ec\//, '/');
+        } else if (hostname.includes('amazon.')) {
+            // Amazon product URLs often have a lot of junk before /dp/ASIN
+            const asinMatch = pathname.match(/\/dp\/([A-Z0-9]{10})/i);
+            if (asinMatch) {
+                pathname = `/dp/${asinMatch[1]}`;
+            }
+        }
+
+        // We use hostname + pathname as a unique key. 
+        // We usually ignore query params for stock alerts as they are mostly tracking/affiliate tags.
+        return `${hostname}${pathname}`;
+    } catch (e) {
+        // Fallback for malformed URLs
+        return url.toLowerCase().trim().replace(/\/+$/, '');
+    }
+}
+
+/**
  * Common Webhook sender that supports App Start, App Stop, and Link Opened messages.
  */
 export async function sendWebhookLog(currentSettings: any, type: 'link' | 'start' | 'stop', data?: any) {
@@ -444,7 +477,8 @@ export async function connectDiscord(token: string) {
             const now = Date.now();
 
             // Check the cache again inside the serial queue block
-            const lastOpened = urlRateLimitCache.get(urlToOpen);
+            const normalizedUrl = normalizeUrl(urlToOpen);
+            const lastOpened = urlRateLimitCache.get(normalizedUrl);
             if (lastOpened && now - lastOpened < RATE_LIMIT_MS) {
                 const remainingSecs = Math.ceil((RATE_LIMIT_MS - (now - lastOpened)) / 1000);
                 dispatchLog(`Ignored (Queue): URL and resource node already active. Cooldown: ${remainingSecs}s remaining.`, 'warning');
@@ -452,7 +486,12 @@ export async function connectDiscord(token: string) {
             }
 
             // Also check message content to prevent duplicate triggers from identical messages without catching URL changes
-            const contentHash = fullText.replace(/[\s\d]/g, '').substring(0, 400);
+            // Improved hashing: Keep digits (IDs), remove emojis/punctuation which bots rotate to bypass filters
+            const contentHash = fullText
+                .toLowerCase()
+                .replace(/[^\p{L}\p{N}]/gu, '') // Keep letters and numbers only, remove emojis/punctuation
+                .substring(0, 500);
+
             if (contentHash.length > 10) {
                 const lastContentTime = messageContentCache.get(contentHash);
                 if (lastContentTime && now - lastContentTime < RATE_LIMIT_MS) {
@@ -464,7 +503,7 @@ export async function connectDiscord(token: string) {
             }
 
             // Immediately reserve this URL in the cache synchronously
-            urlRateLimitCache.set(urlToOpen, now);
+            urlRateLimitCache.set(normalizedUrl, now);
 
             // Clean up old entries to prevent memory leaks
             for (const [cachedUrl, timestamp] of urlRateLimitCache.entries()) {

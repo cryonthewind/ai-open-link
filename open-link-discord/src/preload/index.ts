@@ -29,6 +29,16 @@ const api = {
   login7net: (creds: any) => ipcRenderer.invoke('login-7net', creds),
   startMonitoring: (config: any) => ipcRenderer.send('start-monitoring', config),
   stopMonitoring: () => ipcRenderer.send('stop-monitoring'),
+  
+  // Timer Integrations
+  startTimer: (minutes: number) => ipcRenderer.invoke('start-timer', minutes),
+  stopTimer: () => ipcRenderer.invoke('stop-timer'),
+  getTimerRemaining: () => ipcRenderer.invoke('get-timer-remaining'),
+  onTimerTick: (callback: (remaining: number | null) => void) => {
+    const fn = (_event, value) => callback(value)
+    ipcRenderer.on('timer-tick', fn)
+    return () => ipcRenderer.removeListener('timer-tick', fn)
+  },
 
   // Event Listeners for 7net
   onLogMessage: (callback: any) => {

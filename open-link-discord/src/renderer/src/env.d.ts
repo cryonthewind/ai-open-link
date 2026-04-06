@@ -60,6 +60,12 @@ export interface IElectronAPI {
     onLogMessage: (callback: (event: any, msg: string) => void) => (() => void)
     onStatusChange: (callback: (event: any, status: string) => void) => (() => void)
     onCookieUpdated: (callback: (event: any, cookie: string) => void) => (() => void)
+    
+    // Timer API
+    startTimer: (minutes: number) => Promise<boolean>
+    stopTimer: () => Promise<boolean>
+    getTimerRemaining: () => Promise<number | null>
+    onTimerTick: (callback: (remaining: number | null) => void) => (() => void)
 }
 
 export interface AppLog {
