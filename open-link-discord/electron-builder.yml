@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: open-link-discord
+appId: com.mangekyo.sharingan
+productName: Mangekyo Sharingan
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: open-link-discord
+  executableName: mangekyo-sharingan
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

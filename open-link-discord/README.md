@@ -1,8 +1,8 @@
-# UCHIHA Neural Link (Open Link Discord)
+# Mangekyō Sharingan (Neural Link)
 
 ![UCHIHA App Icon](build/icon.png)
 
-**UCHIHA Neural Link** là một công cụ tối ưu hóa Desktop (phát triển với Electron, React và TypeScript) được thiết kế đặc biệt để tự động hóa việc theo dõi, lọc và xử lý các liên kết (URL) từ Discord cùng với hệ thống giám sát kho hàng (Inventory) 7net.
+**Mangekyō Sharingan** là một công cụ tối ưu hóa Desktop (phát triển với Electron, React và TypeScript) được thiết kế đặc biệt để tự động hóa việc theo dõi, lọc và xử lý các liên kết (URL) từ Discord cùng với hệ thống giám sát kho hàng (Inventory) 7net.
 
 ## 🚀 Các tính năng nổi bật
 

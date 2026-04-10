@@ -1,4 +1,4 @@
-import Store from 'electron-store'
+import type Store from 'electron-store'
 
 export interface AppSettings {
   discordToken: string | null
@@ -82,11 +82,12 @@ let storeInstance: Store<AppSettings> | null = null
 export async function initStore(): Promise<void> {
   // Use dynamic import instead of require to properly load the ESM module in recent Vite/Electron builds
   const StoreModule = await import('electron-store')
-  const StoreClass = StoreModule.default as any
+  // Handle some build systems placing the default export inside a .default property
+  const StoreClass = (StoreModule.default && (StoreModule.default as any).default) || StoreModule.default
 
   storeInstance = new StoreClass({
     schema,
-    name: 'open-link-discord-settings'
+    name: 'mangekyo-sharingan-settings'
   })
 }
 

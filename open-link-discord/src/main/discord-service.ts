@@ -110,7 +110,7 @@ export async function sendWebhookLog(currentSettings: any, type: 'link' | 'start
                     content: null,
                     embeds: [
                         {
-                            title: "🔗 Mở Link Thành Công",
+                            title: "🔗 Mangekyō: Mở Link Thành Công",
                             description: `Ứng dụng vừa tự động mở một liên kết.`,
                             color: 4437375, // Indigo
                             fields: [
@@ -130,8 +130,8 @@ export async function sendWebhookLog(currentSettings: any, type: 'link' | 'start
                 finalPayload = {
                     content: null,
                     embeds: [{
-                        title: "🟢 Ứng Dụng Đã Khởi Động",
-                        description: "Discord Link Opener đã được bật và đang bắt đầu chờ kết nối...",
+                        title: "🟢 Mangekyō: Đã Khởi Động",
+                        description: "Mangekyō Sharingan đã được bật và đang bắt đầu chờ kết nối...",
                         color: 5763719, // Green
                         timestamp: new Date().toISOString()
                     }]
@@ -143,8 +143,8 @@ export async function sendWebhookLog(currentSettings: any, type: 'link' | 'start
                 finalPayload = {
                     content: null,
                     embeds: [{
-                        title: "🔴 Ứng Dụng Đã Tắt",
-                        description: "Discord Link Opener đã ngưng hoạt động.",
+                        title: "🔴 Mangekyō: Đã Tắt",
+                        description: "Mangekyō Sharingan đã ngưng hoạt động.",
                         color: 15548997, // Red
                         timestamp: new Date().toISOString()
                     }]
@@ -296,58 +296,85 @@ export async function connectDiscord(token: string) {
                     }
                 }
             }
+        }
 
-            if (message.type === 'REPLY' && message.reference && message.reference.messageId) {
-                // Try to get the original message from cache
-                const referencedMessage = message.channel.messages.cache.get(message.reference.messageId)
-                if (referencedMessage) {
-                    fullText += '\n[REFERENCED] ' + referencedMessage.content
-                    urls.push(...extractUrls(referencedMessage.content || ''))
+        if (message.type === 'REPLY' && message.reference && message.reference.messageId) {
+            // Try to get the original message from cache
+            const referencedMessage = message.channel.messages.cache.get(message.reference.messageId)
+            if (referencedMessage) {
+                fullText += '\n[REFERENCED] ' + referencedMessage.content
+                urls.push(...extractUrls(referencedMessage.content || ''))
 
-                    if (referencedMessage.embeds && referencedMessage.embeds.length > 0) {
-                        for (const embed of referencedMessage.embeds) {
-                            if (embed.title) fullText += '\n' + embed.title
-                            if (embed.description) fullText += '\n' + embed.description
-                            if (embed.author?.name) fullText += '\n' + embed.author.name
-                            if (embed.footer?.text) fullText += '\n' + embed.footer.text
-                            if (embed.fields) {
-                                for (const field of embed.fields) {
-                                    fullText += '\n' + field.name + '\n' + field.value
-                                }
+                if (referencedMessage.embeds && referencedMessage.embeds.length > 0) {
+                    for (const embed of referencedMessage.embeds) {
+                        if (embed.title) fullText += '\n' + embed.title
+                        if (embed.description) fullText += '\n' + embed.description
+                        if (embed.author?.name) fullText += '\n' + embed.author.name
+                        if (embed.footer?.text) fullText += '\n' + embed.footer.text
+                        if (embed.fields) {
+                            for (const field of embed.fields) {
+                                fullText += '\n' + field.name + '\n' + field.value
                             }
-                            if (embed.url) urls.push(embed.url)
-                            if (embed.author?.url) urls.push(embed.author.url)
-                            if (embed.title) urls.push(...extractUrls(embed.title))
-                            if (embed.description) urls.push(...extractUrls(embed.description))
-                            if (embed.fields) {
-                                for (const field of embed.fields) {
-                                    urls.push(...extractUrls(field.name))
-                                    urls.push(...extractUrls(field.value))
-                                }
+                        }
+                        if (embed.url) urls.push(embed.url)
+                        if (embed.author?.url) urls.push(embed.author.url)
+                        if (embed.title) urls.push(...extractUrls(embed.title))
+                        if (embed.description) urls.push(...extractUrls(embed.description))
+                        if (embed.fields) {
+                            for (const field of embed.fields) {
+                                urls.push(...extractUrls(field.name))
+                                urls.push(...extractUrls(field.value))
                             }
                         }
                     }
                 }
             }
+        }
 
-            // Also check message snapshots (new discord forwarding feature) using RAW CACHE
-            try {
-                const rawPacket = rawMessageCache.get(message.id);
-                if (rawPacket && rawPacket.message_snapshots && Array.isArray(rawPacket.message_snapshots)) {
-                    for (const snapshotRef of rawPacket.message_snapshots) {
-                        const snapshot = snapshotRef;
-                        if (snapshot && typeof snapshot === 'object' && snapshot.message) {
-                            if (snapshot.message.content) {
+        // Also check message snapshots (new discord forwarding feature) using RAW CACHE
+        try {
+            const rawPacket = rawMessageCache.get(message.id);
+            if (rawPacket && rawPacket.message_snapshots && Array.isArray(rawPacket.message_snapshots)) {
+                for (const snapshotRef of rawPacket.message_snapshots) {
+                    const snapshot = snapshotRef;
+                    if (snapshot && typeof snapshot === 'object' && snapshot.message) {
+                        if (snapshot.message.content) {
+                            fullText += '\n[SNAPSHOT] ' + snapshot.message.content
+                            urls.push(...extractUrls(snapshot.message.content))
+                        }
+                        if (snapshot.message.embeds && Array.isArray(snapshot.message.embeds)) {
+                            for (const embed of snapshot.message.embeds) {
+                                if (embed.title) fullText += '\n' + embed.title
+                                if (embed.description) fullText += '\n' + embed.description
+                                if (embed.url) urls.push(embed.url)
+                                if (embed.author?.url) urls.push(embed.author.url)
+                                if (embed.fields && Array.isArray(embed.fields)) {
+                                    for (const field of embed.fields) {
+                                        fullText += '\n' + field.name + '\n' + field.value
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Fallback to library parsing if cache missed
+                const rawMsg = message as any
+                if (rawMsg.messageSnapshots && Array.isArray(rawMsg.messageSnapshots) && rawMsg.messageSnapshots.length > 0) {
+                    for (const snapshotRef of rawMsg.messageSnapshots) {
+                        // Some discord clients send snapshots as objects, some as IDs
+                        const snapshot = typeof snapshotRef === 'object' ? snapshotRef : rawMsg.client.channels.cache.get(message.channelId)?.messages.cache.get(snapshotRef);
+
+                        if (snapshot && typeof snapshot === 'object') {
+                            if (snapshot.message?.content) {
                                 fullText += '\n[SNAPSHOT] ' + snapshot.message.content
                                 urls.push(...extractUrls(snapshot.message.content))
                             }
-                            if (snapshot.message.embeds && Array.isArray(snapshot.message.embeds)) {
+                            if (snapshot.message?.embeds) {
                                 for (const embed of snapshot.message.embeds) {
                                     if (embed.title) fullText += '\n' + embed.title
                                     if (embed.description) fullText += '\n' + embed.description
-                                    if (embed.url) urls.push(embed.url)
-                                    if (embed.author?.url) urls.push(embed.author.url)
-                                    if (embed.fields && Array.isArray(embed.fields)) {
+                                    if (embed.fields) {
                                         for (const field of embed.fields) {
                                             fullText += '\n' + field.name + '\n' + field.value
                                         }
@@ -356,36 +383,10 @@ export async function connectDiscord(token: string) {
                             }
                         }
                     }
-                } else {
-                    // Fallback to library parsing if cache missed
-                    const rawMsg = message as any
-                    if (rawMsg.messageSnapshots && Array.isArray(rawMsg.messageSnapshots) && rawMsg.messageSnapshots.length > 0) {
-                        for (const snapshotRef of rawMsg.messageSnapshots) {
-                            // Some discord clients send snapshots as objects, some as IDs
-                            const snapshot = typeof snapshotRef === 'object' ? snapshotRef : rawMsg.client.channels.cache.get(message.channelId)?.messages.cache.get(snapshotRef);
-
-                            if (snapshot && typeof snapshot === 'object') {
-                                if (snapshot.message?.content) {
-                                    fullText += '\n[SNAPSHOT] ' + snapshot.message.content
-                                    urls.push(...extractUrls(snapshot.message.content))
-                                }
-                                if (snapshot.message?.embeds) {
-                                    for (const embed of snapshot.message.embeds) {
-                                        if (embed.title) fullText += '\n' + embed.title
-                                        if (embed.description) fullText += '\n' + embed.description
-                                        if (embed.fields) {
-                                            for (const field of embed.fields) {
-                                                fullText += '\n' + field.name + '\n' + field.value
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
-            } catch (e) { }
-        }
+            }
+        } catch (e) { }
+
 
         // Cleanup cache just in case
         rawMessageCache.delete(message.id);
@@ -434,8 +435,9 @@ export async function connectDiscord(token: string) {
             }
         }
 
-        let preview = fullText ? fullText.replace(/\n/g, ' ').substring(0, 100) : ''
+        let preview = fullText ? fullText.replace(/\s+/g, ' ').substring(0, 100) : ''
         dispatchLog(`[Channel] Msg received: ${preview}`, 'info')
+
 
 
 
@@ -456,7 +458,7 @@ export async function connectDiscord(token: string) {
         const blacklistKeywords = currentSettings.blacklistKeywords || []
         const matchedBlacklist = getMatchedKeyword(fullText, blacklistKeywords)
         if (matchedBlacklist) {
-            dispatchLog(`Ignored: Hit blacklist keyword "${matchedBlacklist}".`, 'warning')
+            dispatchLog(`Ignored: Hit blacklist keyword "${matchedBlacklist}". Full message: ${preview}`, 'warning')
             return
         }
 
@@ -530,7 +532,7 @@ export async function connectDiscord(token: string) {
                 return false;
             }
 
-            dispatchLog(`Opening URL (${urlToOpen}) in ${profileIds.length} profile(s): ${profileIds.join(', ')}`, 'success')
+            dispatchLog(`Opening URL (${urlToOpen}) in ${profileIds.length} profile(s). Matched whitelist: "${matchedWhitelist}".`, 'success')
 
             const totalProfiles = profileIds.length;
             let screenW = 1920;

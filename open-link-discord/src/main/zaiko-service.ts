@@ -19,7 +19,7 @@ export async function run7netLogin(creds: { email?: string; password?: string })
     width: 800,
     height: 800,
     show: true,
-    title: 'UCHIHA_Neural_Intercept: 7net Login'
+    title: 'Mangekyo Sharingan: 7net Login'
   })
 
   loginWin.loadURL('https://auth.7id.omni7.jp/login-id/input?sitecd=0001&r_url=https%3A%2F%2F7net.omni7.jp%2Ftop%2F&utm_campaign=7ns_7id-acc&utm_medium=referral&utm_source=7ns')

@@ -184,7 +184,7 @@ function App(): React.JSX.Element {
 
   const handleDisconnect = () => {
     disconnectDiscord()
-    addLocalLog('SHUTDOWN: Uchiha Neural Link Terminated.', 'info')
+    addLocalLog('SHUTDOWN: Mangekyō Neural Link Terminated.', 'info')
   }
 
   const handleStartTimer = (customMinutes?: number) => {
@@ -279,7 +279,7 @@ function App(): React.JSX.Element {
 
   if (loading || !settings) return (
     <div className="app-layout" style={{ justifyContent: 'center', alignItems: 'center' }}>
-      <div style={{ color: 'var(--primary)', letterSpacing: '4px', fontWeight: '800' }}>[ SYNCHRONIZING_UCHIHA_ARCHIVE ]</div>
+      <div style={{ color: 'var(--primary)', letterSpacing: '4px', fontWeight: '800' }}>[ SYNCHRONIZING_MANGEKYŌ_ARCHIVE ]</div>
     </div>
   )
 
@@ -301,10 +301,10 @@ function App(): React.JSX.Element {
               width="45" height="45" 
               style={{ borderRadius: '12px', boxShadow: '0 0 15px rgba(255, 49, 49, 0.4)' }} 
               onError={() => setIconError(true)}
-              alt="Uchiha" 
+              alt="Mangekyō" 
             />
           ) : <FallbackIcon />}
-          <h1>UCHIHA.<span style={{ color: '#fff' }}>ARC</span></h1>
+          <h1>MANGEKYŌ.<span style={{ color: '#fff' }}>UI</span></h1>
         </div>
         <nav className="sidebar-nav">
           <SidebarItem id="dashboard" label="DASHBOARD" icon="⌘" />
@@ -367,15 +367,30 @@ function App(): React.JSX.Element {
                     {discordStatus === 'CONNECTED' ? 'TERMINATE' : 'INITIALIZE'}
                   </button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                  <select value={settings.selectedGuildId || ''} onChange={e => updateSettings({ selectedGuildId: e.target.value })}>
-                    <option value="">SCAN_SERVERS</option>
-                    {guilds?.map(g => <option key={g.id} value={g.id}>{g.name.toUpperCase()}</option>)}
-                  </select>
-                  <select value={settings.selectedChannelId || ''} onChange={e => updateSettings({ selectedChannelId: e.target.value })}>
-                    <option value="">SELECT_ALL_STREAMS</option>
-                    {guilds?.find(g => g.id === settings.selectedGuildId)?.channels.map(c => <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>)}
-                  </select>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                  <div>
+                    <span className="label-style">:: Active Server</span>
+                    <select value={settings.selectedGuildId || ''} onChange={e => updateSettings({ selectedGuildId: e.target.value })}>
+                      <option value="">SCAN_SERVERS</option>
+                      {guilds?.map(g => <option key={g.id} value={g.id}>{g.name.toUpperCase()} ({g.id})</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <span className="label-style">:: Active Channel Stream</span>
+                    <select value={settings.selectedChannelId || ''} onChange={e => updateSettings({ selectedChannelId: e.target.value })}>
+                      <option value="">SELECT_ALL_STREAMS</option>
+                      {guilds?.find(g => g.id === settings.selectedGuildId)?.channels.map(c => <option key={c.id} value={c.id}>{c.name.toUpperCase()} ({c.id})</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <span className="label-style">:: Manual Channel ID Override</span>
+                  <input 
+                    type="text" 
+                    placeholder="ENTER_CHANNEL_ID_MANUALLY" 
+                    value={settings.selectedChannelId || ''} 
+                    onChange={e => updateSettings({ selectedChannelId: e.target.value })} 
+                  />
                 </div>
                 <div style={{ marginTop: '2.5rem', display: 'grid', gridTemplateColumns: '1fr auto', gap: '1rem', alignItems: 'flex-end' }}>
                   <div style={{ flex: 1 }}>
@@ -413,7 +428,7 @@ function App(): React.JSX.Element {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <div>
                     <span className="label-style">:: Account Email</span>
-                    <input value={zaikoEmail} onChange={e => setZaikoEmail(e.target.value)} placeholder="uchihasharingan@gmail.com" />
+                    <input value={zaikoEmail} onChange={e => setZaikoEmail(e.target.value)} placeholder="mangekyo@gmail.com" />
                   </div>
                   <div>
                     <span className="label-style">:: Password</span>
@@ -495,7 +510,7 @@ function App(): React.JSX.Element {
         {activeScreen === 'profiles' && (
           <div className="screen-fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
-              <h1 style={{ color: 'var(--primary)', letterSpacing: '2px' }}>UCHIHA_SYSTEM_CONTROL</h1>
+              <h1 style={{ color: 'var(--primary)', letterSpacing: '2px' }}>MANGEKYŌ_SYSTEM_CONTROL</h1>
               <div className="search-bar" style={{ width: '400px' }}><input placeholder="SEARCH_RESOURCE_NODES..." value={profileSearch} onChange={e => setProfileSearch(e.target.value)} /></div>
             </div>
             <div className="card">
