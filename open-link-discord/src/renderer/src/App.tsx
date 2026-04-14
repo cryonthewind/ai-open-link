@@ -212,6 +212,30 @@ function App(): React.JSX.Element {
     addLocalLog(`BLACKLIST_UPDATED: Blocked ${added.length} object(s).`, 'error')
   }
 
+  const handleExport = async (type: 'Whitelist' | 'Blacklist') => {
+    if (!settings) return
+    const keywords = type === 'Whitelist' ? settings.keywords : settings.blacklistKeywords
+    if (!keywords || keywords.length === 0) {
+      addLocalLog(`EXPORT_FAILED: No ${type} identifiers to export.`, 'error')
+      return
+    }
+    const success = await window.api.exportKeywords(keywords, type)
+    if (success) {
+      addLocalLog(`EXPORT_SUCCESS: ${type} identifiers archived.`, 'success')
+    }
+  }
+
+  const handleImport = async (type: 'Whitelist' | 'Blacklist') => {
+    if (!settings) return
+    const imported = await window.api.importKeywords()
+    if (imported && imported.length > 0) {
+      const current = type === 'Whitelist' ? (settings.keywords || []) : (settings.blacklistKeywords || [])
+      const updated = Array.from(new Set([...current, ...imported]))
+      updateSettings({ [type === 'Whitelist' ? 'keywords' : 'blacklistKeywords']: updated })
+      addLocalLog(`IMPORT_SUCCESS: Loaded ${imported.length} ${type} identifier(s).`, 'success')
+    }
+  }
+
   const handleAddTestLink = () => {
     if (!settings || !newLinkProduct || !newLinkUrl) return
     updateSettings({ testLinks: [...(settings.testLinks || []), { product: newLinkProduct, url: newLinkUrl }] })
@@ -475,13 +499,19 @@ function App(): React.JSX.Element {
         {activeScreen === 'keywords' && (
           <div className="screen-fade-in editorial-grid">
             <div className="card">
-              <h2>[ Whitelist Identifiers ]</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h2 style={{ marginBottom: 0 }}>[ Whitelist Identifiers ]</h2>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '10px', height: 'auto', minWidth: 'auto' }} onClick={() => handleImport('Whitelist')}>IMPORT</button>
+                  <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '10px', height: 'auto', minWidth: 'auto' }} onClick={() => handleExport('Whitelist')}>EXPORT</button>
+                </div>
+              </div>
               <input 
                 value={newKeyword} 
                 onChange={e => setNewKeyword(e.target.value)} 
                 onKeyDown={e => e.key === 'Enter' && handleAddKeyword()} 
                 placeholder="+ INPUT_SEQUENCES_TO_FOLLOW..." 
-                style={{ width: '100%' }}
+                style={{ width: '100%', marginBottom: '1.5rem' }}
               />
               <div className="tag-container">
                 {settings.keywords?.map((k, i) => (
@@ -490,13 +520,19 @@ function App(): React.JSX.Element {
               </div>
             </div>
             <div className="card">
-              <h2>[ Forbidden Sequences ]</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                <h2 style={{ marginBottom: 0 }}>[ Forbidden Sequences ]</h2>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '10px', height: 'auto', minWidth: 'auto' }} onClick={() => handleImport('Blacklist')}>IMPORT</button>
+                  <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '10px', height: 'auto', minWidth: 'auto' }} onClick={() => handleExport('Blacklist')}>EXPORT</button>
+                </div>
+              </div>
               <input 
                 value={newBlacklistKeyword} 
                 onChange={e => setNewBlacklistKeyword(e.target.value)} 
                 onKeyDown={e => e.key === 'Enter' && handleAddBlacklist()} 
                 placeholder="+ INPUT_SEQUENCES_TO_BLOCK..." 
-                style={{ width: '100%' }}
+                style={{ width: '100%', marginBottom: '1.5rem' }}
               />
               <div className="tag-container">
                 {settings.blacklistKeywords?.map((k, i) => (
@@ -525,7 +561,13 @@ function App(): React.JSX.Element {
                 {filteredProfiles.map(p => {
                    const isSelected = settings.targetProfileIds?.includes(p.id)
                    return (
-                    <div key={p.id} className={`profile-card ${isSelected ? 'selected' : ''}`} onClick={() => updateSettings({ targetProfileIds: isSelected ? settings.targetProfileIds.filter(id => id !== p.id) : [...(settings.targetProfileIds || []), p.id] })}>
+                    <div key={p.id} className={`profile-card ${isSelected ? 'selected' : ''}`} onClick={() => {
+                      const newIds = isSelected 
+                        ? settings.targetProfileIds.filter(id => id !== p.id) 
+                        : [...(settings.targetProfileIds || []), p.id]
+                      const newNames = newIds.map(id => profiles.find(pr => pr.id === id)?.name || id)
+                      updateSettings({ targetProfileIds: newIds, targetProfileNames: newNames })
+                    }}>
                       <div className="profile-avatar">
                         {!iconError ? (
                           <img src="/app_icon.png?v=2" width="36" height="36" style={{ borderRadius: '8px' }} onError={() => setIconError(true)} alt="Node" />

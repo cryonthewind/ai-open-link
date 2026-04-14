@@ -66,6 +66,9 @@ export interface IElectronAPI {
     stopTimer: () => Promise<boolean>
     getTimerRemaining: () => Promise<number | null>
     onTimerTick: (callback: (remaining: number | null) => void) => (() => void)
+
+    exportKeywords: (keywords: string[], type: 'Whitelist' | 'Blacklist') => Promise<boolean>
+    importKeywords: () => Promise<string[] | null>
 }
 
 export interface AppLog {

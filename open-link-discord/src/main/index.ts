@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
+import * as fs from 'node:fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { store, initStore, AppSettings } from './store'
@@ -142,6 +143,35 @@ if (!gotTheLock) {
     ipcMain.handle('close-app', () => {
       app.quit()
       return true
+    })
+
+    ipcMain.handle('export-keywords', async (_, keywords: string[], type: 'Whitelist' | 'Blacklist') => {
+      const { filePath } = await dialog.showSaveDialog({
+        title: `Export ${type} Identifiers`,
+        defaultPath: `${type.toLowerCase()}_keywords.txt`,
+        filters: [{ name: 'Text Files', extensions: ['txt'] }]
+      })
+
+      if (filePath) {
+        fs.writeFileSync(filePath, keywords.join('\n'), 'utf-8')
+        return true
+      }
+      return false
+    })
+
+    ipcMain.handle('import-keywords', async () => {
+      const { filePaths } = await dialog.showOpenDialog({
+        title: 'Import Identifiers',
+        filters: [{ name: 'Text Files', extensions: ['txt'] }],
+        properties: ['openFile']
+      })
+
+      if (filePaths && filePaths.length > 0) {
+        const content = fs.readFileSync(filePaths[0], 'utf-8')
+        const keywords = content.split('\n').map(k => k.trim()).filter(k => k !== '')
+        return keywords
+      }
+      return null
     })
 
     // Initialize electron-store

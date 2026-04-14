@@ -55,7 +55,9 @@ const api = {
     const fn = (_event: any, cookie: string) => callback(_event, cookie)
     ipcRenderer.on('cookie-updated', fn)
     return () => ipcRenderer.off('cookie-updated', fn)
-  }
+  },
+  exportKeywords: (keywords: string[], type: 'Whitelist' | 'Blacklist') => ipcRenderer.invoke('export-keywords', keywords, type),
+  importKeywords: () => ipcRenderer.invoke('import-keywords')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

@@ -1,9 +1,9 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, shell } from 'electron'
 import { store } from './store'
 import axios from 'axios'
-import open from 'open'
 import { fetchPage } from './zaiko/fetcher'
 import { isItemInStock } from './zaiko/parser'
+import { openUrlInChrome } from './chrome-service'
 
 let isMonitoring = false
 let checkIntervalId: NodeJS.Timeout | null = null
@@ -179,7 +179,58 @@ async function startPolling(targetUrl: string, discordWebhook: string): Promise<
               notifiedItems.set(itemUrl, now)
               if (lastNotified === 0) {
                 sendLogToRenderer(`- DEPLOYING_LINK: ${item.name || 'Target Product'}`, 'success')
-                await open(itemUrl)
+                const currentSettings = store.store
+                const profileIds = currentSettings.targetProfileIds || []
+
+                if (profileIds.length === 0) {
+                  sendLogToRenderer('WARN: No target nodes selected. Falling back to default browser.', 'warning')
+                  await shell.openExternal(itemUrl)
+                } else {
+                  // Calculate window bounds for multi-profile opening
+                  let screenW = 1920
+                  let screenH = 1080
+                  try {
+                    const { screen } = require('electron')
+                    const workArea = screen.getPrimaryDisplay().workAreaSize
+                    screenW = workArea.width
+                    screenH = workArea.height
+                  } catch (e) {
+                    // fallback
+                  }
+
+                  const totalProfiles = profileIds.length
+                  const windowWidth = Math.floor(screenW / totalProfiles)
+
+                  for (let index = 0; index < profileIds.length; index++) {
+                    const profileId = profileIds[index]
+                    const profileName = (currentSettings as any).targetProfileNames?.[index] || profileId
+                    
+                    const bounds = totalProfiles > 1 ? {
+                      x: index * windowWidth,
+                      y: 0,
+                      width: windowWidth,
+                      height: screenH
+                    } : undefined
+
+                    const { success, windowId, error } = await openUrlInChrome(itemUrl, profileId, bounds)
+                    
+                    if (success && windowId) {
+                      sendLogToRenderer(`  -> Opened in node: ${profileName}`, 'info')
+                      // Notify renderer about the opened profile window
+                      if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.webContents.send('profile-opened', {
+                          url: itemUrl,
+                          profileId,
+                          profileName,
+                          windowId,
+                          timestamp: Date.now()
+                        })
+                      }
+                    } else if (!success) {
+                      sendLogToRenderer(`  !! Failed node ${profileName}: ${error || 'Unknown error'}`, 'error')
+                    }
+                  }
+                }
               }
               if (discordWebhook) await notifyDiscord(discordWebhook, '7net Stock Alert', `**${item.name || 'Product'}** IN STOCK!\n${itemUrl}`)
             }
