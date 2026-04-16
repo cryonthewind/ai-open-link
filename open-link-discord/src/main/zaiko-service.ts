@@ -24,13 +24,19 @@ export async function run7netLogin(creds: { email?: string; password?: string })
 
   loginWin.loadURL('https://auth.7id.omni7.jp/login-id/input?sitecd=0001&r_url=https%3A%2F%2F7net.omni7.jp%2Ftop%2F&utm_campaign=7ns_7id-acc&utm_medium=referral&utm_source=7ns')
 
+  loginWin.webContents.on('console-message', (_event, _level, message) => {
+    if (message.startsWith('7NET_LOGIN_STATUS')) {
+      sendLogToRenderer(`[Login Service] ${message}`, 'warning')
+    }
+  })
+
   loginWin.webContents.on('did-finish-load', () => {
     const currentUrl = loginWin.webContents.getURL()
     if (currentUrl.includes('auth.7id.omni7.jp/login-id/input')) {
       loginWin.webContents.executeJavaScript(`
         (function() {
           let attempts = 0;
-          const maxAttempts = 5;
+          const maxAttempts = 10;
           function tryFill() {
             const idInput = document.querySelector('#input-01');
             const passInput = document.querySelector('#input-02');
@@ -48,7 +54,35 @@ export async function run7netLogin(creds: { email?: string; password?: string })
               }
               setAndTrigger(idInput, ${JSON.stringify(creds.email)});
               setAndTrigger(passInput, ${JSON.stringify(creds.password)});
-              if (loginBtn && !loginBtn.disabled) loginBtn.click();
+
+              // Detector for CAPTCHA
+              const hasCaptcha = !!(document.querySelector('.g-recaptcha') || 
+                                    document.querySelector('iframe[src*="recaptcha"]') || 
+                                    document.querySelector('.h-captcha') || 
+                                    document.querySelector('#google-recaptcha-v3-token') ||
+                                    document.body.innerText.includes('私はロボットではありません') ||
+                                    document.body.innerText.includes('Tôi không phải là người máy'));
+              
+              // Detector for account locks
+              const isLocked = document.body.innerText.includes('アカウントがロックされています');
+              
+              // Detector for input errors (wrong pass, etc)
+              const hasError = !!(document.querySelector('.error-msg') || 
+                                  document.querySelector('.error-text') || 
+                                  document.querySelector('.caution-text') ||
+                                  document.querySelector('.caution-msg') ||
+                                  document.body.innerText.includes('正しくありません'));
+
+              if (hasCaptcha || isLocked || hasError) {
+                console.log('7NET_LOGIN_STATUS: Manual interaction required (Captcha: ' + hasCaptcha + ', Locked: ' + isLocked + ', Error: ' + hasError + ')');
+                return;
+              }
+
+              if (loginBtn && !loginBtn.disabled) {
+                setTimeout(() => {
+                   if (loginBtn && !loginBtn.disabled) loginBtn.click();
+                }, 1000);
+              }
             } else if (attempts < maxAttempts) {
               attempts++;
               setTimeout(tryFill, 1000);
